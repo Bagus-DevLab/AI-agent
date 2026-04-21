@@ -2,5 +2,10 @@
 
 Multi-agent AI system dengan berbagai kemampuan: chat, memory, RAG codebase analysis, file editing, dan cloud storage.
 
-## Quick Start
+## 📋 Requirements
+
+- Python 3.9+
+- Dependencies: lihat `requirements.txt`
+
+## 🚀 Quick Start
 

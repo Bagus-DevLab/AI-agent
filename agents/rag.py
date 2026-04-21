@@ -1,39 +1,49 @@
 """
 agents/rag.py — Agent dengan RAG (Retrieval-Augmented Generation).
+Menganalisis codebase menggunakan semantic search.
 """
 
-import sys
+import os
 from langchain_core.messages import SystemMessage, HumanMessage
-from config import get_llm, get_embeddings, SYSTEM_PROMPT_RAG
-from utils.scanner import scan_workspace, get_file_list
+from config import get_llm, get_embeddings, SYSTEM_PROMPT_RAG, validate_config
+from utils.scanner import scan_workspace
 from utils.vectorstore import build_vectorstore, get_retriever, save_vectorstore
 
 
 def main(folder_path="."):
     print("=== AI CODE ANALYST (RAG) ===\n")
-    print(f"📂 Target folder: {folder_path}")
 
-    # Tampilkan daftar file
-    file_list = get_file_list(folder_path)
-    if not file_list:
-        print("❌ Tidak ada file kodingan yang ditemukan.")
+    # Validasi konfigurasi
+    errors = validate_config()
+    if errors:
+        print("❌ Konfigurasi tidak lengkap:")
+        for err in errors:
+            print(f"   - {err}")
         return
+
+    # Validasi folder
+    if not os.path.isdir(folder_path):
+        print(f"❌ Folder tidak ditemukan: {folder_path}")
+        return
+
+    print(f"📂 Target folder: {os.path.abspath(folder_path)}")
 
     # Setup komponen
     llm = get_llm(temperature=0.2)
     embeddings = get_embeddings()
 
-    # Scan & build vectorstore
+    # Scan & build vectorstore (sekali saja, tidak duplikasi)
     print("📥 Memuat dan memproses file...")
     docs, file_count = scan_workspace(folder_path)
-    print(f"✅ Berhasil membaca {file_count} file.\n")
 
     if not docs:
-        print("❌ Gagal mendapatkan konten file.")
+        print("❌ Tidak ada file kodingan yang ditemukan di folder ini.")
         return
 
+    print(f"✅ Berhasil membaca {file_count} file.\n")
+
     vectorstore = build_vectorstore(docs, embeddings)
-    
+
     # Simpan index untuk penggunaan di masa depan
     save_vectorstore(vectorstore)
 
@@ -45,10 +55,12 @@ def main(folder_path="."):
     while True:
         try:
             user_input = input("Lu: ").strip()
-        except KeyboardInterrupt:
+        except (KeyboardInterrupt, EOFError):
+            print("\n👋 Bye!")
             break
 
         if user_input.lower() == "exit":
+            print("👋 Bye!")
             break
         if not user_input:
             continue
@@ -59,13 +71,15 @@ def main(folder_path="."):
         context_parts = []
         for doc in relevant_docs:
             source = doc.metadata.get("source", "unknown")
-            context_parts.append(f"// File Path: {source}\n{doc.page_content}")
+            context_parts.append(f"// File: {source}\n{doc.page_content}")
 
         context = "\n\n---\n\n".join(context_parts)
 
         messages = [
             SystemMessage(content=SYSTEM_PROMPT_RAG),
-            HumanMessage(content=f"Konteks kodingan terkait (RAG):\n{context}\n\n---\n\nPertanyaan user:\n{user_input}"),
+            HumanMessage(
+                content=f"Konteks kodingan terkait (RAG):\n{context}\n\n---\n\nPertanyaan user:\n{user_input}"
+            ),
         ]
 
         print("AI sedang berpikir...")
@@ -74,6 +88,7 @@ def main(folder_path="."):
             print(f"\nAI: {response.content}\n")
         except Exception as e:
             print(f"❌ Error: {e}\n")
+
 
 if __name__ == "__main__":
     main()

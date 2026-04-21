@@ -1,11 +1,38 @@
 """
 utils/ — Package untuk utility functions.
+Menggunakan lazy import untuk menghindari heavy loading saat startup.
 """
 
-# Ubah scan_folder menjadi scan_workspace agar sesuai dengan scanner.py
-from utils.scanner import scan_workspace, get_file_list
-from utils.vectorstore import build_vectorstore, get_retriever
-from utils.memory import load_memori_lokal, simpan_memori_lokal
+
+def scan_workspace(*args, **kwargs):
+    from utils.scanner import scan_workspace as _scan
+    return _scan(*args, **kwargs)
+
+
+def get_file_list(*args, **kwargs):
+    from utils.scanner import get_file_list as _get
+    return _get(*args, **kwargs)
+
+
+def build_vectorstore(*args, **kwargs):
+    from utils.vectorstore import build_vectorstore as _build
+    return _build(*args, **kwargs)
+
+
+def get_retriever(*args, **kwargs):
+    from utils.vectorstore import get_retriever as _get
+    return _get(*args, **kwargs)
+
+
+def load_memori_lokal(*args, **kwargs):
+    from utils.memory import load_memori_lokal as _load
+    return _load(*args, **kwargs)
+
+
+def simpan_memori_lokal(*args, **kwargs):
+    from utils.memory import simpan_memori_lokal as _simpan
+    return _simpan(*args, **kwargs)
+
 
 __all__ = [
     "scan_workspace",
