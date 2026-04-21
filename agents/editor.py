@@ -1,7 +1,6 @@
 """
-agents/editor.py — Agent Editor dengan optimasi RAG + Fix B (broad query detection).
-Hanya mengambil potongan kode yang relevan untuk menghemat token.
-Untuk query umum, inject full file list ke prompt daripada andalkan RAG saja.
+agents/editor.py — Agent Editor dengan optimasi RAG + Fix B (broad query detection) 
++ Fix C (Direct File Focus) + Auto-Refresh Index.
 """
 
 import os
@@ -14,33 +13,25 @@ from utils.vectorstore import build_vectorstore, get_retriever
 # Base directory project — semua operasi file dibatasi di sini
 BASE_DIR = os.path.abspath(os.getcwd())
 
-# FIX B (improved): Deteksi broad query pakai dua lapis filter:
-# 1. BROAD_SUBJECTS — kata yang merujuk ke keseluruhan project/file
-# 2. BROAD_ACTIONS  — kata yang merujuk ke aksi lihat/jelaskan/tampilkan
-# Query dianggap broad kalau mengandung min 1 kata dari SETIAP kelompok,
-# ATAU mengandung keyword eksplisit di BROAD_EXPLICIT.
-
+# ==========================================
+# FILTER DETEKSI QUERY UMUM (BROAD QUERY)
+# ==========================================
 BROAD_SUBJECTS = {
-    # Bahasa Indonesia
     "file", "folder", "direktori", "struktur", "project",
     "codebase", "kode", "semua", "seluruh", "keseluruhan",
     "index", "terindex", "di-index", "yang ada", "apa saja",
-    # Bahasa Inggris
     "files", "folders", "directory", "structure", "all",
     "entire", "whole", "indexed",
 }
 
 BROAD_ACTIONS = {
-    # Bahasa Indonesia
     "jelaskan", "tampilkan", "tunjukkan", "lihat", "list",
     "daftar", "rangkum", "ringkas", "ceritakan", "sebutkan",
     "gambarkan", "apa", "berapa",
-    # Bahasa Inggris
     "explain", "show", "describe", "summarize",
     "what", "display",
 }
 
-# Keyword eksplisit yang langsung trigger broad query tanpa perlu 2 kata
 BROAD_EXPLICIT = {
     "overview", "struktur project", "project structure",
     "rangkuman project", "summary project", "semua file",
@@ -49,33 +40,39 @@ BROAD_EXPLICIT = {
 
 
 def is_broad_query(query: str) -> bool:
-    """
-    Deteksi apakah query bersifat umum/broad menggunakan dua lapis filter.
-    Broad = ada kata subjek umum DAN kata aksi, atau keyword eksplisit.
-    """
+    """Deteksi apakah query bersifat umum/broad."""
     query_lower = query.lower()
-
-    # Cek keyword eksplisit dulu (paling cepat)
     if any(kw in query_lower for kw in BROAD_EXPLICIT):
         return True
-
-    # Cek kombinasi subjek + aksi
     has_subject = any(word in query_lower for word in BROAD_SUBJECTS)
     has_action = any(word in query_lower for word in BROAD_ACTIONS)
     return has_subject and has_action
 
 
+def find_mentioned_files(query: str, docs: list) -> list:
+    """
+    Mencari apakah user menyebutkan nama file secara spesifik di prompt.
+    Jika ya, kembalikan seluruh isi file tersebut agar AI tidak halu.
+    """
+    mentioned = []
+    query_lower = query.lower()
+    
+    for doc in docs:
+        # Ambil nama file saja (misal: "readme.md" dari "./readme.md")
+        filename = os.path.basename(doc["path"]).lower()
+        if filename in query_lower:
+            mentioned.append(doc)
+            
+    return mentioned
+
+
 def build_file_overview(folder_path: str, docs: list) -> str:
-    """
-    FIX B: Bangun ringkasan semua file yang ter-index untuk disisipkan ke prompt.
-    Menampilkan path + 3 baris pertama tiap file sebagai preview.
-    """
+    """Bangun ringkasan semua file (hanya preview 3 baris) untuk broad query."""
     lines = [f"📂 Workspace: {os.path.abspath(folder_path)}",
              f"Total {len(docs)} file ter-index:\n"]
 
     for doc in docs:
         path = doc["path"]
-        # Ambil 3 baris pertama sebagai preview konten
         preview = "\n".join(doc["content"].splitlines()[:3])
         lines.append(f"• {path}\n  {preview[:120]}{'...' if len(preview) > 120 else ''}")
 
@@ -83,21 +80,13 @@ def build_file_overview(folder_path: str, docs: list) -> str:
 
 
 def is_safe_path(filepath: str) -> bool:
-    """
-    Memastikan filepath target tetap berada di dalam BASE_DIR (Security Sandbox).
-    Mencegah path traversal seperti ../../etc/passwd atau path absolut di luar project.
-    """
+    """Memastikan filepath target tetap berada di dalam BASE_DIR (Anti Path-Traversal)."""
     target_abs = os.path.abspath(filepath)
     return target_abs.startswith(BASE_DIR)
 
 
 def extract_save_blocks(ai_response: str):
-    """
-    FIX REGEX: Parser nesting-aware untuk ekstrak blok [SAVE: path].
-    Pattern lama gagal kalau konten berisi nested code blocks (misal README.md
-    dengan contoh ```bash di dalamnya) — regex ``` pertama dianggap penutup.
-    Solusi: hitung kedalaman nesting ``` secara manual.
-    """
+    """Parser nesting-aware untuk ekstrak blok [SAVE: path] beserta isinya."""
     results = []
     save_tags = list(re.finditer(r'\[SAVE:\s*(.+?)\]', ai_response))
 
@@ -105,7 +94,6 @@ def extract_save_blocks(ai_response: str):
         filepath = tag.group(1).strip()
         after_tag = ai_response[tag.end():]
 
-        # Cari opening ```lang
         open_match = re.match(r'\s*```(\w*)\n', after_tag)
         if not open_match:
             continue
@@ -113,14 +101,13 @@ def extract_save_blocks(ai_response: str):
         content_after = after_tag[open_match.end():]
         lines = content_after.split('\n')
 
-        # Hitung kedalaman nesting — closing ``` di depth=0 adalah penutup SAVE
         depth = 1
         content_lines = []
         for line in lines:
-            if re.match(r'^```\w+', line):   # opening nested block
+            if re.match(r'^```\w+', line):   
                 depth += 1
                 content_lines.append(line)
-            elif re.match(r'^```\s*$', line): # closing block
+            elif re.match(r'^```\s*$', line): 
                 depth -= 1
                 if depth == 0:
                     break
@@ -136,20 +123,21 @@ def execute_file_operations(ai_response):
     """Mencari dan mengeksekusi perintah manipulasi file dengan konfirmasi."""
     changes_made = []
 
-    # 1. Logika SAVE — pakai nesting-aware parser, bukan regex sederhana
+    # 1. Eksekusi perintah SAVE
     save_matches = extract_save_blocks(ai_response)
     for filepath, file_content in save_matches:
         filepath = filepath.strip()
 
         if not is_safe_path(filepath):
-            print(f"🚫 Ditolak: '{filepath}' berada di luar area project. Operasi dibatalkan.")
+            print(f"🚫 Ditolak: '{filepath}' berada di luar area project.")
             continue
 
         konfirmasi = input(f"\n💾 Simpan perubahan ke '{filepath}'? (y/n): ").strip().lower()
         if konfirmasi == 'y':
             try:
                 parent_dir = os.path.dirname(os.path.abspath(filepath))
-                os.makedirs(parent_dir, exist_ok=True)
+                if parent_dir:
+                    os.makedirs(parent_dir, exist_ok=True)
                 with open(filepath, "w", encoding="utf-8") as f:
                     f.write(file_content)
                 print(f"✅ Berhasil mengupdate {filepath}")
@@ -157,14 +145,14 @@ def execute_file_operations(ai_response):
             except Exception as e:
                 print(f"❌ Gagal menyimpan {filepath}: {e}")
 
-    # 2. Logika DELETE
+    # 2. Eksekusi perintah DELETE
     delete_pattern = r"\[DELETE:\s*(.+?)\]"
     delete_matches = re.findall(delete_pattern, ai_response)
     for filepath in delete_matches:
         filepath = filepath.strip()
 
         if not is_safe_path(filepath):
-            print(f"🚫 Ditolak: '{filepath}' berada di luar area project. Operasi dibatalkan.")
+            print(f"🚫 Ditolak: '{filepath}' berada di luar area project.")
             continue
 
         konfirmasi = input(f"\n🗑️  Hapus file '{filepath}'? (y/n): ").strip().lower()
@@ -179,7 +167,6 @@ def execute_file_operations(ai_response):
 def main(folder_path="."):
     print(f"=== 🛠️  AI SMART EDITOR (RAG ENABLED) ===\n📂 Workspace: {folder_path}")
 
-    # FIX #8: Validasi konfigurasi di awal sebelum scan/embedding
     errors = validate_config()
     if errors:
         print("❌ Konfigurasi tidak lengkap:")
@@ -187,17 +174,14 @@ def main(folder_path="."):
             print(f"   - {err}")
         return
 
-    # Validasi folder
     if not os.path.isdir(folder_path):
         print(f"❌ Folder tidak ditemukan: {folder_path}")
         return
 
-    # Inisialisasi komponen
     llm = get_llm(temperature=0.2)
     embeddings = get_embeddings()
 
-    # Scan workspace — docs disimpan juga untuk keperluan broad query (Fix B)
-    print("📥 Scanning dan indexing kodingan...")
+    print("📥 Scanning dan indexing kodingan awal...")
     docs, count = scan_workspace(folder_path)
 
     if not docs:
@@ -212,7 +196,6 @@ def main(folder_path="."):
     print("Ketik 'exit' untuk keluar.\n")
 
     while True:
-        # FIX #6: Tangani EOFError sekalian dengan KeyboardInterrupt
         try:
             user_input = input("\nLu: ").strip()
         except (KeyboardInterrupt, EOFError):
@@ -225,19 +208,36 @@ def main(folder_path="."):
         if not user_input:
             continue
 
-        # FIX B: Deteksi broad query — pakai full file overview bukan RAG
-        if is_broad_query(user_input):
-            print("📋 Query umum terdeteksi — menggunakan full file overview...")
+        # ==========================================
+        # 3-WAY CONTEXT ROUTING
+        # ==========================================
+        mentioned_files = find_mentioned_files(user_input, docs)
+
+        if mentioned_files:
+            # PRIORITAS 1: User menyebut file spesifik -> Inject FULL content
+            print(f"🎯 File spesifik terdeteksi. Membaca isi file sepenuhnya...")
+            context_parts = []
+            for doc in mentioned_files:
+                context_parts.append(f"// FULL FILE CONTENT: {doc['path']}\n{doc['content']}")
+            
+            context_str = "\n\n---\n\n".join(context_parts)
+            prompt = f"BERIKUT ADALAH ISI FULL DARI FILE YANG DIMINTA:\n{context_str}\n\nINSTRUKSI USER: {user_input}"
+            
+        elif is_broad_query(user_input):
+            # PRIORITAS 2: User bertanya umum -> Inject File Overview
+            print("📋 Query umum terdeteksi — menggunakan file overview...")
             context_str = build_file_overview(folder_path, docs)
-            prompt = f"DAFTAR LENGKAP FILE DI WORKSPACE:\n{context_str}\n\nINSTRUKSI USER: {user_input}"
+            prompt = f"DAFTAR LENGKAP FILE DI WORKSPACE (PREVIEW ONLY):\n{context_str}\n\nINSTRUKSI USER: {user_input}"
+            
         else:
-            print("🔍 Mencari referensi kode yang relevan...")
+            # PRIORITAS 3: Query spesifik kode -> Gunakan RAG Semantic Search
+            print("🔍 Mencari referensi kode yang relevan via RAG...")
             relevant_chunks = retriever.invoke(user_input)
 
             context_parts = []
             for doc in relevant_chunks:
                 source = doc.metadata.get("source", "unknown")
-                context_parts.append(f"// File: {source}\n{doc.page_content}")
+                context_parts.append(f"// File Chunk: {source}\n{doc.page_content}")
 
             context_str = "\n\n---\n\n".join(context_parts)
             prompt = f"REFERENSI KODE RELEVAN:\n{context_str}\n\nINSTRUKSI USER: {user_input}"
@@ -250,14 +250,24 @@ def main(folder_path="."):
             ai_text = response.content
             print(f"\nAI:\n{ai_text}\n")
 
-            if execute_file_operations(ai_text):
-                print("🔄 Catatan: File telah berubah. Jalankan ulang editor jika ingin refresh index.")
+            # Eksekusi operasi file
+            perubahan = execute_file_operations(ai_text)
+            
+            # ==========================================
+            # AUTO-REFRESH INDEX JIKA ADA PERUBAHAN
+            # ==========================================
+            if perubahan:
+                print("\n🔄 Menyegarkan index otomatis agar AI mengingat perubahan terbaru...")
+                docs, count = scan_workspace(folder_path)
+                vectorstore = build_vectorstore(docs, embeddings)
+                retriever = get_retriever(vectorstore, top_k=5)
+                print(f"✅ Index berhasil diperbarui! ({count} file ter-index)")
 
             chat_history.append(AIMessage(content=ai_text))
 
         except Exception as e:
             print(f"❌ Terjadi kesalahan: {e}")
-            # FIX #7: Pop HumanMessage terakhir agar history tidak corrupt
+            # Hapus prompt terakhir dari history jika error agar tidak merusak flow
             chat_history.pop()
 
 

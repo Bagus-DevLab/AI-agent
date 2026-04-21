@@ -82,6 +82,7 @@ def get_llm(temperature=None, timeout=None):
         model=LLM_MODEL,
         temperature=temperature if temperature is not None else LLM_TEMPERATURE,
         timeout=timeout if timeout is not None else LLM_TIMEOUT,
+        max_tokens=4096,  # 👈 Tambahkan baris ini
     )
 
 
