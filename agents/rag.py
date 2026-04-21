@@ -5,25 +5,32 @@ Optimasi Problem 3: Keamanan Path (Security Sandbox).
 
 import os
 from langchain_core.messages import SystemMessage, HumanMessage
-from config import get_llm, get_embeddings, SYSTEM_PROMPT_RAG, validate_config
+from config import get_llm, get_embeddings, SYSTEM_PROMPT_RAG, validate_config, BASE_DIR
 from utils.scanner import scan_workspace
 from utils.vectorstore import build_vectorstore, get_retriever, save_vectorstore, load_vectorstore
 
-# Base directory ditetapkan saat startup agar konsisten
-BASE_DIR = os.path.abspath(os.getcwd())
+# Gunakan BASE_DIR dari config agar konsisten (bukan os.getcwd() saat import)
 
 
 def is_safe_path(path: str) -> bool:
     """
     Memastikan path target tetap berada di dalam BASE_DIR (Security Sandbox).
-    Mencegah path traversal seperti ../../etc atau path absolut di luar project.
+    
+    FIX 1: Gunakan os.path.realpath() untuk resolve symlinks.
+    FIX 2: Gunakan os.sep untuk mencegah prefix bypass 
+           (e.g., /home/user/project_evil vs /home/user/project).
     """
-    target_abs = os.path.abspath(path)
-    return target_abs.startswith(BASE_DIR)
+    # Resolve symlinks DAN normalize path
+    target_abs = os.path.realpath(os.path.abspath(path))
+    base_abs = os.path.realpath(BASE_DIR)
+
+    # Pastikan path berada di dalam BASE_DIR dengan separator check
+    # Ini mencegah /home/user/project_evil lolos dari check /home/user/project
+    return target_abs == base_abs or target_abs.startswith(base_abs + os.sep)
 
 
-def main(folder_path="."):
-    print("=== AI CODE ANALYST (RAG) ===\n")
+def main():
+    print("=== RAG AGENT ===\n")
 
     # Validasi konfigurasi
     errors = validate_config()
@@ -33,89 +40,85 @@ def main(folder_path="."):
             print(f"   - {err}")
         return
 
-    # Validasi keamanan path target
-    if not is_safe_path(folder_path):
-        print(f"❌ Akses ditolak: Folder '{folder_path}' berada di luar area project.")
-        return
-
-    # Validasi folder
-    if not os.path.isdir(folder_path):
-        print(f"❌ Folder tidak ditemukan: {folder_path}")
-        return
-
-    print(f"📂 Target folder: {os.path.abspath(folder_path)}")
-
-    # Setup komponen
-    llm = get_llm(temperature=0.2)
+    llm = get_llm()
     embeddings = get_embeddings()
 
-    vectorstore = None
-    index_path = "faiss_index"
+    # Coba load existing vectorstore, atau buat baru
+    print("📂 Memuat workspace...")
+    vectorstore = load_vectorstore(embeddings)
 
-    # Cek apakah index sudah pernah dibuat sebelumnya
-    if os.path.exists(index_path):
-        print(f"📂 Folder '{index_path}' ditemukan.")
-        pilihan = input("👉 Gunakan index yang sudah ada? (y/n): ").strip().lower()
-        if pilihan == "y":
-            print("📥 Memuat index dari penyimpanan lokal...")
-            vectorstore = load_vectorstore(index_path)
-            if not vectorstore:
-                print("⚠️ Gagal memuat index lama, beralih ke scan ulang.")
-
-    # Jika index belum ada atau user pilih scan ulang
-    if not vectorstore:
-        print("📥 Memproses file dan membangun index baru...")
-        docs, file_count = scan_workspace(folder_path)
-
+    if vectorstore is None:
+        print("🔨 Membuat index baru...")
+        docs = scan_workspace(BASE_DIR)
         if not docs:
-            print("❌ Tidak ada file kodingan yang ditemukan di folder ini.")
+            print("❌ Tidak ada file yang ditemukan untuk di-index.")
             return
-
-        print(f"✅ Berhasil membaca {file_count} file. Memulai embedding...")
         vectorstore = build_vectorstore(docs, embeddings)
-
-        # Simpan index agar bisa dipakai lagi nanti
-        save_vectorstore(vectorstore, index_path)
+        save_vectorstore(vectorstore)
+        print(f"✅ {len(docs)} dokumen berhasil di-index.")
+    else:
+        print("✅ Index berhasil dimuat dari cache.")
 
     retriever = get_retriever(vectorstore)
 
-    print("\n🤖 RAG Agent siap! Tanya apa saja tentang kode ini.")
-    print("Ketik 'exit' untuk keluar.\n")
+    print("\n🤖 Agent siap! Tanya apa saja tentang kode ini.")
+    print("Ketik 'exit' untuk keluar, 'reindex' untuk rebuild index.\n")
 
     while True:
         try:
             user_input = input("Lu: ").strip()
         except (KeyboardInterrupt, EOFError):
+            print("\n👋 Bye!")
             break
 
-        if user_input.lower() in ["exit", "quit"]:
-            break
         if not user_input:
             continue
 
-        print("🔍 Mencari konteks relevan...")
-        relevant_docs = retriever.invoke(user_input)
+        if user_input.lower() == "exit":
+            print("👋 Bye!")
+            break
 
-        context_parts = []
-        for doc in relevant_docs:
-            source = doc.metadata.get("source", "unknown")
-            context_parts.append(f"// File: {source}\n{doc.page_content}")
+        if user_input.lower() == "reindex":
+            print("🔨 Rebuilding index...")
+            docs = scan_workspace(BASE_DIR)
+            if not docs:
+                print("❌ Tidak ada file yang ditemukan.")
+                continue
+            vectorstore = build_vectorstore(docs, embeddings)
+            save_vectorstore(vectorstore)
+            retriever = get_retriever(vectorstore)
+            print(f"✅ {len(docs)} dokumen berhasil di-reindex.")
+            continue
 
-        context = "\n\n---\n\n".join(context_parts)
+        # Retrieve relevant context
+        try:
+            relevant_docs = retriever.invoke(user_input)
+        except Exception as e:
+            print(f"❌ Error saat retrieval: {e}")
+            continue
 
+        if not relevant_docs:
+            context_text = "(Tidak ada konteks yang relevan ditemukan)"
+        else:
+            context_text = "\n\n---\n\n".join(
+                [f"📄 {doc.metadata.get('source', 'unknown')}:\n{doc.page_content}" for doc in relevant_docs]
+            )
+
+        # Build messages
         messages = [
             SystemMessage(content=SYSTEM_PROMPT_RAG),
-            HumanMessage(
-                content=f"Konteks kodingan terkait (RAG):\n{context}\n\n---\n\nPertanyaan user:\n{user_input}"
-            ),
+            HumanMessage(content=(
+                f"Konteks dari codebase:\n{context_text}\n\n"
+                f"Pertanyaan user:\n{user_input}"
+            )),
         ]
 
-        print("AI sedang berpikir...")
+        # Get response
         try:
             response = llm.invoke(messages)
-            print(f"\nAI: {response.content}\n")
+            print(f"\n🤖: {response.content}\n")
         except Exception as e:
-            print(f"❌ Error: {e}\n")
+            print(f"❌ Error dari LLM: {e}\n")
 
 
 if __name__ == "__main__":

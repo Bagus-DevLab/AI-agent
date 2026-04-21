@@ -1,5 +1,6 @@
 """
 config.py — Konfigurasi terpusat untuk semua agent.
+Membaca data dari file .env secara presisi.
 """
 
 import os
@@ -11,18 +12,18 @@ load_dotenv(os.path.join(os.getcwd(), '.env'))
 # === LLM Settings ===
 LLM_API_KEY = os.getenv("ENOWXAI_KEY", "")
 LLM_BASE_URL = os.getenv("ENOWXAI_URL", "")
-# Gunakan model default yang valid
-LLM_MODEL = os.getenv("ENOWXAI_MODEL", "claude-sonnet-4-20250514")
-LLM_TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", "0.7"))
-LLM_TIMEOUT = int(os.getenv("LLM_TIMEOUT", "300"))
+LLM_MODEL = os.getenv("ENOWXAI_MODEL", "claude-opus-4.6")
+# Disesuaikan dengan nama variabel di .env lo:
+LLM_TEMPERATURE = float(os.getenv("DEFAULT_TEMPERATURE", "0.7"))
+LLM_TIMEOUT = int(os.getenv("DEFAULT_TIMEOUT", "60"))
 
 # === Cloudflare R2 Settings ===
 R2_ENDPOINT = os.getenv("R2_ENDPOINT", "")
-R2_ACCOUNT_ID = os.getenv("R2_ACCOUNT_ID", "")
 R2_ACCESS_KEY = os.getenv("R2_ACCESS_KEY", "")
 R2_SECRET_KEY = os.getenv("R2_SECRET_KEY", "")
-R2_BUCKET_NAME = os.getenv("R2_BUCKET_NAME", "ai-memory")
-R2_MEMORY_KEY = os.getenv("R2_MEMORY_KEY", "chat_memory.json")
+R2_BUCKET_NAME = os.getenv("R2_BUCKET_NAME", "memory-ai-bagus")
+# Disesuaikan dengan nama file memori di .env lo:
+R2_MEMORY_KEY = os.getenv("MEMORY_FILE", "chat_history.json")
 
 # === RAG Settings ===
 CHUNK_SIZE = 1000
@@ -33,6 +34,9 @@ EMBEDDING_MODEL = "all-MiniLM-L6-v2"
 # === Memory Settings ===
 MAX_MEMORY_MESSAGES = 50  # Batas maksimal pesan dalam memori
 
+# === Path Configuration ===
+BASE_DIR = os.path.abspath(os.path.dirname(__file__))
+
 # === System Prompts ===
 SYSTEM_PROMPT_BASIC = "Kamu adalah asisten AI yang helpful dan menjawab dengan bahasa yang santai tapi informatif."
 SYSTEM_PROMPT_MEMORY = "Kamu adalah asisten asik yang selalu ingat nama user dan konteks percakapan sebelumnya."
@@ -40,9 +44,19 @@ SYSTEM_PROMPT_RAG = (
     "Kamu adalah AI Programmer Expert. Jawab pertanyaan user HANYA berdasarkan konteks kode yang diberikan. "
     "Jika konteks tidak cukup, katakan sejujurnya. Jangan mengarang kode."
 )
+
+# FIX: SYSTEM PROMPT EDITOR DENGAN ATURAN [/SAVE] YANG KETAT
 SYSTEM_PROMPT_EDITOR = (
-    "Kamu adalah Senior AI Programmer. Kamu bisa membaca, membuat, dan mengedit file. "
-    "Gunakan tag [SAVE: path] untuk setiap modifikasi file."
+    "Kamu adalah Senior AI Programmer. Kamu bisa membaca, membuat, dan mengedit file.\n\n"
+    "Setiap kali kamu memodifikasi, membuat, atau menulis ke dalam file, kamu WAJIB "
+    "menggunakan format blok berikut secara persis:\n"
+    "[SAVE: path_file_tujuan]\n"
+    "Tuliskan seluruh isi file di sini...\n"
+    "[/SAVE]\n\n"
+    "ATURAN PENTING:\n"
+    "1. Tag [SAVE: path] harus berada di barisnya sendiri.\n"
+    "2. Tag penutup [/SAVE] WAJIB ada dan harus berada di baris baru paling akhir.\n"
+    "3. Jangan gunakan backticks markdown (```) untuk membungkus blok SAVE ini."
 )
 
 # Bypass proxy hanya untuk localhost, bukan semua koneksi
@@ -82,7 +96,7 @@ def get_llm(temperature=None, timeout=None):
         model=LLM_MODEL,
         temperature=temperature if temperature is not None else LLM_TEMPERATURE,
         timeout=timeout if timeout is not None else LLM_TIMEOUT,
-        max_tokens=4096,  # 👈 Tambahkan baris ini
+        max_tokens=4096,  # 👈 Memastikan output AI tidak terpotong saat menulis file
     )
 
 

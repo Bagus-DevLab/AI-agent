@@ -1,5 +1,8 @@
-def hello():
-    print("hello")
-```
+"""
+utils/helper.py — Utility helper functions.
+"""
 
-Tanpa `
+
+def hello():
+    """Simple hello function untuk testing."""
+    print("hello")
