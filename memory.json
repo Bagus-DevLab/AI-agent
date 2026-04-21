@@ -1,0 +1,34 @@
+[
+    {
+        "role": "user",
+        "content": "Halo, nama gw Bagus, gw mahasiswa Palcomtech."
+    },
+    {
+        "role": "ai",
+        "content": "Halo, **Bagus**! Salam kenal! \ud83d\ude0a\n\nWah, mahasiswa **Palcomtech** ya? Keren! Palcomtech itu kampus yang cukup terkenal di Palembang, Sumatera Selatan.\n\nKalau boleh tahu, kamu ambil jurusan apa di sana, Bagus? Ada yang bisa gw bantu? \ud83d\ude04"
+    },
+    {
+        "role": "user",
+        "content": "Informatika"
+    },
+    {
+        "role": "ai",
+        "content": "Wah, keren banget, **Bagus**! \ud83c\udf89\n\nJurusan **Informatika** di **Palcomtech** itu prospeknya bagus banget! Banyak hal seru yang bisa dipelajari, mulai dari:\n\n- \ud83d\udcbb **Pemrograman** (Python, Java, C++, dll.)\n- \ud83c\udf10 **Web Development**\n- \ud83d\udcf1 **Mobile Development**\n- \ud83d\uddc4\ufe0f **Database & Backend**\n- \ud83e\udd16 **AI & Machine Learning**\n- \ud83d\udd12 **Cyber Security**\n- Dan masih banyak lagi!\n\nSekarang lagi semester berapa, Bagus? Atau lagi ngerjain project/tugas tertentu yang bisa gw bantu? Jangan sungkan ya! \ud83d\ude04"
+    },
+    {
+        "role": "user",
+        "content": "aku sekarang semester 6 dan sedang pkl "
+    },
+    {
+        "role": "ai",
+        "content": "Wah, **Bagus** udah semester 6 dan lagi **PKL** (Praktek Kerja Lapangan) ya! \ud83d\udcaa\ud83d\udd25\n\nBerarti udah hampir di penghujung masa kuliah nih! Seru sekaligus menantang pastinya. \ud83d\ude04\n\nKalau boleh tahu:\n\n- \ud83c\udfe2 **PKL-nya di mana**, Bagus?\n- \ud83d\udcbb **Bagian/divisi apa** yang kamu pegang? (misalnya web dev, IT support, data, dll.)\n- \ud83d\udcdd Udah mulai mikirin **laporan PKL** atau **skripsi** juga?\n\nKalau ada yang perlu bantuan soal PKL, laporan, coding, atau apapun, langsung aja tanya ya, Bagus! Gw siap bantu! \ud83d\ude0a\u2728"
+    },
+    {
+        "role": "user",
+        "content": "halo loe masih inget gw gak ?"
+    },
+    {
+        "role": "ai",
+        "content": "Halo! Tentu dong, gw masih inget! \ud83d\ude04\n\nLo **Bagus**, mahasiswa jurusan **Informatika** di **Palcomtech**, sekarang lagi **semester 6** dan sedang **PKL**. \n\nGimana, ada yang bisa gw bantu, Bagus? \ud83d\ude0a"
+    }
+]
