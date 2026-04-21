@@ -1,26 +1,18 @@
 """
-utils/vectorstore.py — Helper untuk membuat vector store dari dokumen.
+utils/vectorstore.py — Helper untuk membuat dan menyimpan vector store.
 Digunakan oleh RAG agent untuk semantic search.
 """
 
+import os
 from langchain_community.vectorstores import FAISS
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain.schema import Document
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_core.documents import Document
 from config import get_embeddings, CHUNK_SIZE, CHUNK_OVERLAP, RETRIEVER_TOP_K
 
 
-def build_vectorstore(file_list: list[dict]) -> FAISS:
+def build_vectorstore(file_list: list[dict], embeddings=None) -> FAISS:
     """
     Bangun FAISS vector store dari list file yang sudah di-scan.
-    
-    Args:
-        file_list: List of {"path": str, "content": str}
-        
-    Returns:
-        FAISS vector store yang siap diquery
-        
-    Raises:
-        ValueError: Jika file_list kosong
     """
     if not file_list:
         raise ValueError("Tidak ada file untuk di-index. Pastikan folder berisi file kode.")
@@ -47,24 +39,46 @@ def build_vectorstore(file_list: list[dict]) -> FAISS:
 
     # Bangun vector store
     try:
-        embeddings = get_embeddings()
-        vectorstore = FAISS.from_documents(chunks, embeddings)
+        # Jika embeddings tidak dipassing, ambil dari config
+        emb_model = embeddings if embeddings else get_embeddings()
+        vectorstore = FAISS.from_documents(chunks, emb_model)
         print(f"   ✅ Vector store siap! ({len(chunks)} chunks indexed)")
         return vectorstore
     except Exception as e:
         raise RuntimeError(f"Gagal build vector store: {e}")
 
 
+def save_vectorstore(vectorstore: FAISS, folder_path: str = "faiss_index"):
+    """
+    Simpan vector store ke lokal agar tidak perlu build ulang terus.
+    Fungsi ini dipanggil oleh rag.py.
+    """
+    try:
+        vectorstore.save_local(folder_path)
+        print(f"   💾 Vector store berhasil disimpan ke folder: {folder_path}")
+    except Exception as e:
+        print(f"   ❌ Gagal menyimpan vector store: {e}")
+
+
+def load_vectorstore(folder_path: str = "faiss_index") -> FAISS:
+    """
+    Load vector store yang sudah ada dari penyimpanan lokal.
+    """
+    try:
+        embeddings = get_embeddings()
+        return FAISS.load_local(
+            folder_path, 
+            embeddings, 
+            allow_dangerous_deserialization=True
+        )
+    except Exception as e:
+        print(f"   ❌ Gagal memuat vector store: {e}")
+        return None
+
+
 def get_retriever(vectorstore: FAISS, top_k: int = None):
     """
     Buat retriever dari vector store.
-    
-    Args:
-        vectorstore: FAISS vector store
-        top_k: Jumlah dokumen yang di-retrieve (default dari config)
-        
-    Returns:
-        Retriever object
     """
     k = top_k if top_k is not None else RETRIEVER_TOP_K
     return vectorstore.as_retriever(search_kwargs={"k": k})

@@ -1,9 +1,5 @@
 """
-rag.py — Agent dengan RAG (Retrieval-Augmented Generation).
-Membaca seluruh codebase lalu menjawab pertanyaan berdasarkan kode.
-Pengganti agent_rag.py yang sudah di-refactor.
-
-Usage: python -m agents.rag [folder_path]
+agents/rag.py — Agent dengan RAG (Retrieval-Augmented Generation).
 """
 
 import sys
@@ -13,19 +9,15 @@ from utils.scanner import scan_workspace, get_file_list
 from utils.vectorstore import build_vectorstore, get_retriever, save_vectorstore
 
 
-def main():
+def main(folder_path="."):
     print("=== AI CODE ANALYST (RAG) ===\n")
-
-    # Tentukan folder target
-    folder_path = sys.argv[1] if len(sys.argv) > 1 else "."
     print(f"📂 Target folder: {folder_path}")
 
     # Tampilkan daftar file
     file_list = get_file_list(folder_path)
-    print(f"📄 Ditemukan {len(file_list)} file kodingan:")
-    for f in file_list:
-        print(f"   - {f}")
-    print()
+    if not file_list:
+        print("❌ Tidak ada file kodingan yang ditemukan.")
+        return
 
     # Setup komponen
     llm = get_llm(temperature=0.2)
@@ -37,15 +29,12 @@ def main():
     print(f"✅ Berhasil membaca {file_count} file.\n")
 
     if not docs:
-        print("❌ Tidak ada file yang bisa dibaca. Keluar.")
+        print("❌ Gagal mendapatkan konten file.")
         return
 
     vectorstore = build_vectorstore(docs, embeddings)
-    if not vectorstore:
-        print("❌ Gagal membangun vector database. Keluar.")
-        return
-
-    # Simpan vectorstore ke disk
+    
+    # Simpan index untuk penggunaan di masa depan
     save_vectorstore(vectorstore)
 
     retriever = get_retriever(vectorstore)
@@ -54,24 +43,26 @@ def main():
     print("Ketik 'exit' untuk keluar.\n")
 
     while True:
-        user_input = input("Lu: ")
-        if user_input.lower() == "exit":
-            print("Bye! 👋")
+        try:
+            user_input = input("Lu: ").strip()
+        except KeyboardInterrupt:
             break
 
-        # Retrieve konteks yang relevan
+        if user_input.lower() == "exit":
+            break
+        if not user_input:
+            continue
+
         print("🔍 Mencari konteks relevan...")
         relevant_docs = retriever.invoke(user_input)
 
-        # Bangun konteks dari hasil retrieval
         context_parts = []
-        for i, doc in enumerate(relevant_docs, 1):
+        for doc in relevant_docs:
             source = doc.metadata.get("source", "unknown")
             context_parts.append(f"// File Path: {source}\n{doc.page_content}")
 
         context = "\n\n---\n\n".join(context_parts)
 
-        # Kirim ke LLM dengan konteks
         messages = [
             SystemMessage(content=SYSTEM_PROMPT_RAG),
             HumanMessage(content=f"Konteks kodingan terkait (RAG):\n{context}\n\n---\n\nPertanyaan user:\n{user_input}"),
@@ -83,7 +74,6 @@ def main():
             print(f"\nAI: {response.content}\n")
         except Exception as e:
             print(f"❌ Error: {e}\n")
-
 
 if __name__ == "__main__":
     main()
