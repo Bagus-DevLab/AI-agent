@@ -1,73 +1,109 @@
 """
-scanner.py — Modul untuk scanning folder kodingan secara dinamis.
-Digunakan oleh agent_rag dan agent_edit.
+utils/scanner.py — Scanner untuk membaca file-file dari sebuah folder.
+Digunakan oleh RAG agent untuk indexing codebase.
 """
 
 import os
-from langchain_community.document_loaders import TextLoader
-from config import FORBIDDEN_DIRS, ALLOWED_EXTS
+
+# Ekstensi file yang didukung untuk scanning
+SUPPORTED_EXTENSIONS = {
+    ".py", ".js", ".ts", ".jsx", ".tsx",
+    ".java", ".go", ".rs", ".cpp", ".c", ".h",
+    ".html", ".css", ".scss",
+    ".json", ".yaml", ".yml", ".toml",
+    ".md", ".txt", ".rst",
+    ".sh", ".bash", ".zsh",
+    ".sql", ".graphql",
+    ".dockerfile", ".env.example",
+}
+
+# Folder yang di-skip saat scanning
+SKIP_DIRS = {
+    "__pycache__", ".git", ".venv", "venv", "env",
+    "node_modules", ".next", "dist", "build",
+    ".idea", ".vscode", ".mypy_cache", ".pytest_cache",
+    "egg-info", ".eggs", ".tox",
+}
+
+# File yang di-skip
+SKIP_FILES = {
+    ".env", ".env.local", ".DS_Store", "Thumbs.db",
+    "package-lock.json", "yarn.lock", "poetry.lock",
+}
+
+# Batas ukuran file (500KB)
+MAX_FILE_SIZE = 500 * 1024
 
 
-def scan_workspace(folder_path="."):
+def scan_folder(folder_path: str) -> list[dict]:
     """
-    Scan seluruh file kodingan di folder secara rekursif.
-    Menghindari folder terlarang dan hanya membaca ekstensi yang diizinkan.
+    Scan folder dan return list of dict berisi path + content file.
     
     Args:
-        folder_path: Path root folder yang akan di-scan
+        folder_path: Path ke folder yang mau di-scan
         
     Returns:
-        tuple: (docs, file_count) — list dokumen dan jumlah file yang berhasil dibaca
+        List of {"path": str, "content": str}
+        
+    Raises:
+        FileNotFoundError: Jika folder tidak ditemukan
+        NotADirectoryError: Jika path bukan folder
     """
-    docs = []
-    file_count = 0
+    # Validasi path
+    if not os.path.exists(folder_path):
+        raise FileNotFoundError(f"Path tidak ditemukan: {folder_path}")
+    if not os.path.isdir(folder_path):
+        raise NotADirectoryError(f"Path bukan folder: {folder_path}")
+
+    results = []
+    skipped_count = 0
 
     for root, dirs, files in os.walk(folder_path):
-        # Filter folder terlarang SEBELUM masuk ke dalamnya
-        dirs[:] = [d for d in dirs if d not in FORBIDDEN_DIRS]
+        # Filter out skip directories (in-place untuk os.walk)
+        dirs[:] = [d for d in dirs if d not in SKIP_DIRS and not d.startswith(".")]
 
-        for file_name in files:
-            _, ext = os.path.splitext(file_name)
-            if ext.lower() not in ALLOWED_EXTS:
+        for filename in files:
+            filepath = os.path.join(root, filename)
+            rel_path = os.path.relpath(filepath, folder_path)
+
+            # Skip file tertentu
+            if filename in SKIP_FILES:
+                skipped_count += 1
                 continue
 
-            file_path = os.path.join(root, file_name)
+            # Cek ekstensi
+            _, ext = os.path.splitext(filename)
+            if ext.lower() not in SUPPORTED_EXTENSIONS and filename not in ("Dockerfile", "Makefile", "Procfile"):
+                skipped_count += 1
+                continue
+
+            # Cek ukuran file
             try:
-                loader = TextLoader(file_path, encoding="utf-8")
-                loaded_docs = loader.load()
+                file_size = os.path.getsize(filepath)
+                if file_size > MAX_FILE_SIZE:
+                    print(f"   ⏭️  Skip (terlalu besar): {rel_path} ({file_size // 1024}KB)")
+                    skipped_count += 1
+                    continue
+                if file_size == 0:
+                    skipped_count += 1
+                    continue
+            except OSError:
+                skipped_count += 1
+                continue
 
-                # Tambahkan metadata path ke setiap dokumen
-                for doc in loaded_docs:
-                    doc.metadata["source"] = file_path
-
-                docs.extend(loaded_docs)
-                file_count += 1
+            # Baca file
+            try:
+                with open(filepath, "r", encoding="utf-8", errors="ignore") as f:
+                    content = f.read()
+                results.append({
+                    "path": rel_path,
+                    "content": content,
+                })
             except Exception as e:
-                print(f"  ⚠️ Gagal baca {file_path}: {e}")
+                print(f"   ⚠️  Gagal baca: {rel_path} ({e})")
+                skipped_count += 1
 
-    return docs, file_count
+    if skipped_count > 0:
+        print(f"   ℹ️  {skipped_count} file di-skip (tidak relevan/terlalu besar)")
 
-
-def get_file_list(folder_path="."):
-    """
-    Mendapatkan daftar file kodingan tanpa membaca isinya.
-    Berguna untuk menampilkan workspace overview.
-    
-    Args:
-        folder_path: Path root folder
-        
-    Returns:
-        list: Daftar path file yang ditemukan
-    """
-    file_list = []
-
-    for root, dirs, files in os.walk(folder_path):
-        dirs[:] = [d for d in dirs if d not in FORBIDDEN_DIRS]
-
-        for file_name in files:
-            _, ext = os.path.splitext(file_name)
-            if ext.lower() in ALLOWED_EXTS:
-                file_path = os.path.join(root, file_name)
-                file_list.append(file_path)
-
-    return sorted(file_list)
+    return results

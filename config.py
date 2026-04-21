@@ -1,44 +1,26 @@
 """
-config.py — Shared Configuration untuk seluruh Agent
-Semua setting terpusat di sini, tidak ada lagi hardcode di masing-masing file.
+config.py — Konfigurasi terpusat untuk semua agent.
+Semua setting LLM, embedding, dan prompt ada di sini.
 """
 
 import os
 from dotenv import load_dotenv
 
-# Load .env file
 load_dotenv()
 
 # === LLM Settings ===
 LLM_API_KEY = os.getenv("ENOWXAI_KEY", "")
 LLM_BASE_URL = os.getenv("ENOWXAI_URL", "")
-LLM_MODEL = os.getenv("ENOWXAI_MODEL", "claude-opus-4.6")
-LLM_TEMPERATURE = float(os.getenv("DEFAULT_TEMPERATURE", "0.7"))
-LLM_TIMEOUT = int(os.getenv("DEFAULT_TIMEOUT", "60"))
+LLM_MODEL = os.getenv("LLM_MODEL", "gpt-4o-mini")
+LLM_TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", "0.7"))
+LLM_TIMEOUT = int(os.getenv("LLM_TIMEOUT", "120"))
 
 # === Cloudflare R2 Settings ===
+R2_ACCOUNT_ID = os.getenv("R2_ACCOUNT_ID", "")
 R2_ACCESS_KEY = os.getenv("R2_ACCESS_KEY", "")
 R2_SECRET_KEY = os.getenv("R2_SECRET_KEY", "")
-R2_ENDPOINT = os.getenv("R2_ENDPOINT", "")
 R2_BUCKET_NAME = os.getenv("R2_BUCKET_NAME", "ai-memory")
-
-# === File & Path Settings ===
-MEMORY_FILE = os.getenv("MEMORY_FILE", "chat_history.json")
-CLOUD_FILE_NAME = "chat_history.json"
-
-# === Scanner Settings ===
-FORBIDDEN_DIRS = {
-    "venv", ".venv", "env", ".git", "node_modules",
-    "__pycache__", ".cache", "build", "dist",
-    ".idea", ".vscode", "faiss_index"
-}
-
-ALLOWED_EXTS = {
-    ".py", ".go", ".js", ".ts", ".jsx", ".tsx",
-    ".html", ".css", ".md", ".txt", ".sh", ".php",
-    ".yaml", ".yml", ".toml", ".json", ".sql",
-    ".rs", ".java", ".c", ".cpp", ".h", ".rb"
-}
+R2_MEMORY_KEY = os.getenv("R2_MEMORY_KEY", "chat_memory.json")
 
 # === RAG Settings ===
 CHUNK_SIZE = 1000
@@ -62,8 +44,46 @@ SYSTEM_PROMPT_EDITOR = (
 os.environ["no_proxy"] = "*"
 
 
+def validate_config():
+    """Validasi konfigurasi minimum yang dibutuhkan."""
+    errors = []
+    if not LLM_API_KEY:
+        errors.append("ENOWXAI_KEY belum diset di .env")
+    if not LLM_BASE_URL:
+        errors.append("ENOWXAI_URL belum diset di .env")
+    if errors:
+        print("⚠️  KONFIGURASI TIDAK LENGKAP:")
+        for err in errors:
+            print(f"   ❌ {err}")
+        print(f"\n💡 Buat file .env di root project dengan isi:")
+        print(f"   ENOWXAI_KEY=your_api_key_here")
+        print(f"   ENOWXAI_URL=https://your-llm-endpoint.com/v1")
+        return False
+    return True
+
+
+def validate_r2_config():
+    """Validasi konfigurasi R2 untuk cloud agent."""
+    errors = []
+    if not R2_ACCOUNT_ID:
+        errors.append("R2_ACCOUNT_ID belum diset")
+    if not R2_ACCESS_KEY:
+        errors.append("R2_ACCESS_KEY belum diset")
+    if not R2_SECRET_KEY:
+        errors.append("R2_SECRET_KEY belum diset")
+    if errors:
+        print("⚠️  KONFIGURASI R2 TIDAK LENGKAP:")
+        for err in errors:
+            print(f"   ❌ {err}")
+        return False
+    return True
+
+
 def get_llm(temperature=None, timeout=None):
     """Factory function untuk membuat instance LLM yang konsisten."""
+    if not validate_config():
+        raise RuntimeError("Konfigurasi LLM tidak valid. Cek file .env")
+
     from langchain_openai import ChatOpenAI
     return ChatOpenAI(
         api_key=LLM_API_KEY,
@@ -78,14 +98,3 @@ def get_embeddings():
     """Factory function untuk membuat instance Embeddings yang konsisten."""
     from langchain_huggingface import HuggingFaceEmbeddings
     return HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL)
-
-
-def get_r2_client():
-    """Factory function untuk membuat S3-compatible client ke Cloudflare R2."""
-    import boto3
-    return boto3.client(
-        "s3",
-        endpoint_url=R2_ENDPOINT,
-        aws_access_key_id=R2_ACCESS_KEY,
-        aws_secret_access_key=R2_SECRET_KEY,
-    )

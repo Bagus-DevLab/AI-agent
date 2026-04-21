@@ -29,6 +29,48 @@ def show_menu():
 """)
 
 
+def run_agent(choice):
+    """Jalankan agent berdasarkan pilihan user."""
+    try:
+        if choice == "1":
+            from agents.basic import main as agent_main
+            agent_main()
+
+        elif choice == "2":
+            from agents.memory import main as agent_main
+            agent_main()
+
+        elif choice == "3":
+            # RAG butuh target folder
+            if len(sys.argv) > 2:
+                target = sys.argv[2]
+            else:
+                target = input("📁 Masukkan path folder yang mau dianalisis (default: .): ").strip()
+                if not target:
+                    target = "."
+            from agents.rag import main as agent_main
+            agent_main(target)
+
+        elif choice == "4":
+            from agents.editor import main as agent_main
+            agent_main()
+
+        elif choice == "5":
+            from agents.cloud import main as agent_main
+            agent_main()
+
+        else:
+            print(f"❌ Pilihan '{choice}' tidak valid.")
+
+    except KeyboardInterrupt:
+        print("\n\n👋 Agent dihentikan oleh user.")
+    except ImportError as e:
+        print(f"\n❌ Gagal load agent: {e}")
+        print("💡 Pastikan semua dependency terinstall: pip install -r requirements.txt")
+    except Exception as e:
+        print(f"\n❌ Error tidak terduga: {e}")
+
+
 def main():
     # Cek apakah ada argument langsung
     if len(sys.argv) > 1:
@@ -54,35 +96,15 @@ def main():
         choice = input("Pilih agent [0-5]: ").strip()
 
         if choice == "0":
-            print("Bye! 👋")
+            print("👋 Bye!")
             break
-        elif choice in ("1", "2", "3", "4", "5"):
+        elif choice in ["1", "2", "3", "4", "5"]:
+            print()
             run_agent(choice)
+            print("\n" + "=" * 40)
+            input("Tekan Enter untuk kembali ke menu...")
         else:
-            print("❌ Pilihan tidak valid. Coba lagi.")
-
-
-def run_agent(choice):
-    try:
-        if choice == "1":
-            from agents.basic import main as agent_main
-            agent_main()
-        elif choice == "2":
-            from agents.memory import main as agent_main
-            agent_main()
-        elif choice == "3":
-            from agents.rag import main as agent_main
-            agent_main()
-        elif choice == "4":
-            from agents.editor import main as agent_main
-            agent_main()
-        elif choice == "5":
-            from agents.cloud import main as agent_main
-            agent_main()
-    except KeyboardInterrupt:
-        print("\n\n⚠️ Agent dihentikan oleh user.")
-    except Exception as e:
-        print(f"\n❌ Error menjalankan agent: {e}")
+            print("❌ Pilihan tidak valid, coba lagi.")
 
 
 if __name__ == "__main__":
