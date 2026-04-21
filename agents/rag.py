@@ -4,20 +4,22 @@ Optimasi Problem 3: Keamanan Path (Security Sandbox).
 """
 
 import os
-import sys
 from langchain_core.messages import SystemMessage, HumanMessage
 from config import get_llm, get_embeddings, SYSTEM_PROMPT_RAG, validate_config
-from utils.scanner import scan_workspace, get_file_list
+from utils.scanner import scan_workspace
 from utils.vectorstore import build_vectorstore, get_retriever, save_vectorstore, load_vectorstore
 
+# Base directory ditetapkan saat startup agar konsisten
+BASE_DIR = os.path.abspath(os.getcwd())
 
-def is_safe_path(path):
+
+def is_safe_path(path: str) -> bool:
     """
-    PROBLEM 3 FIX: Memastikan path target tetap berada di dalam folder project (Sandbox).
+    Memastikan path target tetap berada di dalam BASE_DIR (Security Sandbox).
+    Mencegah path traversal seperti ../../etc atau path absolut di luar project.
     """
-    base_dir = os.getcwd()
     target_abs = os.path.abspath(path)
-    return target_abs.startswith(base_dir)
+    return target_abs.startswith(BASE_DIR)
 
 
 def main(folder_path="."):
@@ -31,7 +33,7 @@ def main(folder_path="."):
             print(f"   - {err}")
         return
 
-    # PROBLEM 3 FIX: Validasi keamanan path target
+    # Validasi keamanan path target
     if not is_safe_path(folder_path):
         print(f"❌ Akses ditolak: Folder '{folder_path}' berada di luar area project.")
         return
@@ -46,7 +48,7 @@ def main(folder_path="."):
     # Setup komponen
     llm = get_llm(temperature=0.2)
     embeddings = get_embeddings()
-    
+
     vectorstore = None
     index_path = "faiss_index"
 
@@ -54,7 +56,7 @@ def main(folder_path="."):
     if os.path.exists(index_path):
         print(f"📂 Folder '{index_path}' ditemukan.")
         pilihan = input("👉 Gunakan index yang sudah ada? (y/n): ").strip().lower()
-        if pilihan == 'y':
+        if pilihan == "y":
             print("📥 Memuat index dari penyimpanan lokal...")
             vectorstore = load_vectorstore(index_path)
             if not vectorstore:
