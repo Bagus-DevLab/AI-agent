@@ -2,7 +2,7 @@
 agents/memory.py — Agent dengan memori percakapan persisten lokal.
 """
 
-from langchain_core.messages import HumanMessage, AIMessage
+from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from config import get_llm, SYSTEM_PROMPT_MEMORY, validate_config
 from utils.memory import load_memori_lokal, simpan_memori_lokal, trim_history
 
@@ -21,7 +21,8 @@ def main():
     llm = get_llm()
     chat_history = load_memori_lokal(SYSTEM_PROMPT_MEMORY)
 
-    msg_count = len([m for m in chat_history if not isinstance(m, __import__('langchain_core.messages', fromlist=['SystemMessage']).SystemMessage)])
+    # FIX: Ganti __import__ inline dengan isinstance pakai SystemMessage yang sudah diimport di atas
+    msg_count = len([m for m in chat_history if not isinstance(m, SystemMessage)])
     if msg_count > 0:
         print(f"📝 Memuat {msg_count} pesan dari memori sebelumnya.")
 
@@ -40,7 +41,7 @@ def main():
             print("👋 Bye!")
             break
         if user_input.lower() == "clear":
-            from langchain_core.messages import SystemMessage
+            # FIX: Tidak perlu import ulang, SystemMessage sudah ada di top-level
             chat_history = [SystemMessage(content=SYSTEM_PROMPT_MEMORY)]
             simpan_memori_lokal(chat_history)
             print("🗑️ Memori dihapus.\n")
