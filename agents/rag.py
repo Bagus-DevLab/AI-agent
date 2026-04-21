@@ -49,13 +49,13 @@ def main():
 
     if vectorstore is None:
         print("🔨 Membuat index baru...")
-        docs = scan_workspace(BASE_DIR)
+        docs, count = scan_workspace(BASE_DIR)
         if not docs:
             print("❌ Tidak ada file yang ditemukan untuk di-index.")
             return
         vectorstore = build_vectorstore(docs, embeddings)
         save_vectorstore(vectorstore)
-        print(f"✅ {len(docs)} dokumen berhasil di-index.")
+        print(f"✅ {count} dokumen berhasil di-index.")
     else:
         print("✅ Index berhasil dimuat dari cache.")
 
@@ -80,7 +80,7 @@ def main():
 
         if user_input.lower() == "reindex":
             print("🔨 Rebuilding index...")
-            docs = scan_workspace(BASE_DIR)
+            docs, count = scan_workspace(BASE_DIR)
             if not docs:
                 print("❌ Tidak ada file yang ditemukan.")
                 continue
