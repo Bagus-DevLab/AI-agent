@@ -12,7 +12,7 @@ load_dotenv(os.path.join(os.getcwd(), '.env'))
 LLM_API_KEY = os.getenv("ENOWXAI_KEY", "")
 LLM_BASE_URL = os.getenv("ENOWXAI_URL", "")
 # Gunakan model default yang valid
-LLM_MODEL = os.getenv("LLM_MODEL", "claude-sonnet-4-20250514")
+LLM_MODEL = os.getenv("ENOWXAI_MODEL", "claude-sonnet-4-20250514")
 LLM_TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", "0.7"))
 LLM_TIMEOUT = int(os.getenv("LLM_TIMEOUT", "300"))
 

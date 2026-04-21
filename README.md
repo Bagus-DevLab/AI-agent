@@ -5,7 +5,10 @@ Multi-agent AI system dengan berbagai kemampuan: chat, memory, RAG codebase anal
 ## 📋 Requirements
 
 - Python 3.9+
-- Dependencies: lihat `requirements.txt`
+- OpenAI API Key atau model LLM lainnya
+- (Opsional) AWS S3 / Cloudflare R2 credentials untuk cloud storage
 
 ## 🚀 Quick Start
+
+### 1. Install Dependencies
 

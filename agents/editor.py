@@ -91,14 +91,54 @@ def is_safe_path(filepath: str) -> bool:
     return target_abs.startswith(BASE_DIR)
 
 
+def extract_save_blocks(ai_response: str):
+    """
+    FIX REGEX: Parser nesting-aware untuk ekstrak blok [SAVE: path].
+    Pattern lama gagal kalau konten berisi nested code blocks (misal README.md
+    dengan contoh ```bash di dalamnya) — regex ``` pertama dianggap penutup.
+    Solusi: hitung kedalaman nesting ``` secara manual.
+    """
+    results = []
+    save_tags = list(re.finditer(r'\[SAVE:\s*(.+?)\]', ai_response))
+
+    for tag in save_tags:
+        filepath = tag.group(1).strip()
+        after_tag = ai_response[tag.end():]
+
+        # Cari opening ```lang
+        open_match = re.match(r'\s*```(\w*)\n', after_tag)
+        if not open_match:
+            continue
+
+        content_after = after_tag[open_match.end():]
+        lines = content_after.split('\n')
+
+        # Hitung kedalaman nesting — closing ``` di depth=0 adalah penutup SAVE
+        depth = 1
+        content_lines = []
+        for line in lines:
+            if re.match(r'^```\w+', line):   # opening nested block
+                depth += 1
+                content_lines.append(line)
+            elif re.match(r'^```\s*$', line): # closing block
+                depth -= 1
+                if depth == 0:
+                    break
+                content_lines.append(line)
+            else:
+                content_lines.append(line)
+
+        results.append((filepath, '\n'.join(content_lines)))
+    return results
+
+
 def execute_file_operations(ai_response):
     """Mencari dan mengeksekusi perintah manipulasi file dengan konfirmasi."""
     changes_made = []
 
-    # 1. Logika SAVE
-    save_pattern = r"\[SAVE:\s*(.+?)\]\s*```[a-zA-Z]*\n(.*?)```"
-    save_matches = re.findall(save_pattern, ai_response, re.DOTALL)
-    for filepath, content in save_matches:
+    # 1. Logika SAVE — pakai nesting-aware parser, bukan regex sederhana
+    save_matches = extract_save_blocks(ai_response)
+    for filepath, file_content in save_matches:
         filepath = filepath.strip()
 
         if not is_safe_path(filepath):
@@ -111,7 +151,7 @@ def execute_file_operations(ai_response):
                 parent_dir = os.path.dirname(os.path.abspath(filepath))
                 os.makedirs(parent_dir, exist_ok=True)
                 with open(filepath, "w", encoding="utf-8") as f:
-                    f.write(content)
+                    f.write(file_content)
                 print(f"✅ Berhasil mengupdate {filepath}")
                 changes_made.append(f"SAVE: {filepath}")
             except Exception as e:
