@@ -1,13 +1,23 @@
 """
 agents/rag.py — Agent dengan RAG (Retrieval-Augmented Generation).
-Menganalisis codebase menggunakan semantic search.
+Optimasi Problem 3: Keamanan Path (Security Sandbox).
 """
 
 import os
+import sys
 from langchain_core.messages import SystemMessage, HumanMessage
 from config import get_llm, get_embeddings, SYSTEM_PROMPT_RAG, validate_config
-from utils.scanner import scan_workspace
-from utils.vectorstore import build_vectorstore, get_retriever, save_vectorstore
+from utils.scanner import scan_workspace, get_file_list
+from utils.vectorstore import build_vectorstore, get_retriever, save_vectorstore, load_vectorstore
+
+
+def is_safe_path(path):
+    """
+    PROBLEM 3 FIX: Memastikan path target tetap berada di dalam folder project (Sandbox).
+    """
+    base_dir = os.getcwd()
+    target_abs = os.path.abspath(path)
+    return target_abs.startswith(base_dir)
 
 
 def main(folder_path="."):
@@ -21,6 +31,11 @@ def main(folder_path="."):
             print(f"   - {err}")
         return
 
+    # PROBLEM 3 FIX: Validasi keamanan path target
+    if not is_safe_path(folder_path):
+        print(f"❌ Akses ditolak: Folder '{folder_path}' berada di luar area project.")
+        return
+
     # Validasi folder
     if not os.path.isdir(folder_path):
         print(f"❌ Folder tidak ditemukan: {folder_path}")
@@ -31,21 +46,34 @@ def main(folder_path="."):
     # Setup komponen
     llm = get_llm(temperature=0.2)
     embeddings = get_embeddings()
+    
+    vectorstore = None
+    index_path = "faiss_index"
 
-    # Scan & build vectorstore (sekali saja, tidak duplikasi)
-    print("📥 Memuat dan memproses file...")
-    docs, file_count = scan_workspace(folder_path)
+    # Cek apakah index sudah pernah dibuat sebelumnya
+    if os.path.exists(index_path):
+        print(f"📂 Folder '{index_path}' ditemukan.")
+        pilihan = input("👉 Gunakan index yang sudah ada? (y/n): ").strip().lower()
+        if pilihan == 'y':
+            print("📥 Memuat index dari penyimpanan lokal...")
+            vectorstore = load_vectorstore(index_path)
+            if not vectorstore:
+                print("⚠️ Gagal memuat index lama, beralih ke scan ulang.")
 
-    if not docs:
-        print("❌ Tidak ada file kodingan yang ditemukan di folder ini.")
-        return
+    # Jika index belum ada atau user pilih scan ulang
+    if not vectorstore:
+        print("📥 Memproses file dan membangun index baru...")
+        docs, file_count = scan_workspace(folder_path)
 
-    print(f"✅ Berhasil membaca {file_count} file.\n")
+        if not docs:
+            print("❌ Tidak ada file kodingan yang ditemukan di folder ini.")
+            return
 
-    vectorstore = build_vectorstore(docs, embeddings)
+        print(f"✅ Berhasil membaca {file_count} file. Memulai embedding...")
+        vectorstore = build_vectorstore(docs, embeddings)
 
-    # Simpan index untuk penggunaan di masa depan
-    save_vectorstore(vectorstore)
+        # Simpan index agar bisa dipakai lagi nanti
+        save_vectorstore(vectorstore, index_path)
 
     retriever = get_retriever(vectorstore)
 
@@ -56,11 +84,9 @@ def main(folder_path="."):
         try:
             user_input = input("Lu: ").strip()
         except (KeyboardInterrupt, EOFError):
-            print("\n👋 Bye!")
             break
 
-        if user_input.lower() == "exit":
-            print("👋 Bye!")
+        if user_input.lower() in ["exit", "quit"]:
             break
         if not user_input:
             continue
