@@ -1,93 +1,33 @@
-# ==========================================
-# ENVIRONMENT & API KEYS
-# ==========================================
-.env
-.env.local
-.env.production
-.env.*.local
-
-# ==========================================
-# PYTHON
-# ==========================================
+# Python
 __pycache__/
-*.py[cod]
-*$py.class
-*.so
-*.egg
+*.pyc
+*.pyo
 *.egg-info/
 dist/
 build/
-eggs/
-*.manifest
-*.spec
-pip-log.txt
-pip-delete-this-directory.txt
+.eggs/
 
-# ==========================================
-# VIRTUAL ENVIRONMENT
-# ==========================================
+# Virtual Environment
 venv/
-env/
 .venv/
-.env/
-ENV/
+env/
 
-# ==========================================
-# FAISS / VECTOR STORE
-# ==========================================
-*.faiss
-faiss_index/
-vectorstore/
-index.faiss
-index.pkl
-
-# ==========================================
-# IDE & EDITOR
-# ==========================================
+# IDE
 .vscode/
 .idea/
 *.swp
 *.swo
-*~
-.project
-.settings/
 
-# ==========================================
-# OS FILES
-# ==========================================
+# Environment variables
+.env
+.env.local
+
+# OS
 .DS_Store
 Thumbs.db
-desktop.ini
-*.lnk
 
-# ==========================================
-# LOGS & CACHE
-# ==========================================
-*.log
-logs/
-.cache/
-.pytest_cache/
-htmlcov/
-.coverage
-.coverage.*
+# Memory files
+chat_memory.json
 
-# ==========================================
-# JUPYTER NOTEBOOK
-# ==========================================
-.ipynb_checkpoints/
-
-# ==========================================
-# NODE (jika ada frontend)
-# ==========================================
-node_modules/
-package-lock.json
-yarn.lock
-
-# ==========================================
-# MISC
-# ==========================================
-*.bak
-*.tmp
-*.temp
-*.sqlite3
-*.db
+# Backup files
+_backup_*
