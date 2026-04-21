@@ -141,7 +141,7 @@ def should_skip_file(filename: str) -> bool:
 # ============================================================================
 
 # Ubah baris def-nya jadi begini:
-def scan_workspace(folder_path: str = ".") -> tuple[list[tuple], int]:
+def scan_workspace(folder_path: str = ".") -> tuple[list[dict], int]:
     """
     Scan direktori secara rekursif dan baca semua file source code.
 
@@ -150,7 +150,7 @@ def scan_workspace(folder_path: str = ".") -> tuple[list[tuple], int]:
 
     Returns:
         Tuple berisi:
-        - list[tuple]: List of (relative_path, content) untuk setiap file
+        - list[dict]: List of {"path": relative_path, "content": file_content}
         - int: Jumlah file yang berhasil di-scan
     """
     results: list[dict] = []
@@ -196,7 +196,7 @@ def scan_workspace(folder_path: str = ".") -> tuple[list[tuple], int]:
                 if not rel_path.startswith("."):
                     rel_path = f"./{rel_path}"
 
-                results.append((rel_path, content))
+                results.append({"path": rel_path, "content": content})
                 
             except (IOError, OSError, UnicodeDecodeError):
                 # Skip file yang tidak bisa dibaca
