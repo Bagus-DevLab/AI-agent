@@ -2,6 +2,7 @@ import os
 import sys
 import re
 import shutil
+import subprocess
 from langchain_community.document_loaders import TextLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_huggingface import HuggingFaceEmbeddings
@@ -82,8 +83,11 @@ retriever = vectorstore.as_retriever(search_kwargs={"k": 4})
 # ==========================================
 # 5. LOOP INTERAKTIF AGENT
 # ==========================================
-print(f"\n🚀 === AI AGENT (FULL STACK) SIAP! === 🚀")
-print("Kamu bisa menyuruh bot untuk: 'Refactor kode', 'Bikin file baru', 'Hapus file', atau 'Pindahkan file'.")
+print(f"\n🚀 === AI AGENT (FULL STACK + DEVOPS) SIAP! === 🚀")
+print("Perintah yang bisa dilakukan bot:")
+print("1. Tanya jawab / Refactor kode")
+print("2. Manajemen File (Bikin, Hapus, Pindah)")
+print("3. Eksekusi Terminal (git commit, npm install, dll - Butuh persetujuan lu)")
 print("Ketik 'exit' untuk keluar.\n")
 
 chat_history = []
@@ -102,15 +106,15 @@ while True:
     
     print("AI sedang memikirkan dan menganalisis kode...")
     try:
-        # Mencari context kodingan yang relevan berdasarkan pertanyaan (Untuk mencari isi kode spesifik)
+        # Mencari context kodingan yang relevan berdasarkan pertanyaan
         docs_found = retriever.invoke(pertanyaan)
         konteks = "\n\n".join(doc.page_content for doc in docs_found)
         
         # Susun daftar file menjadi teks agar AI tahu isi folder secara global
         struktur_project = "\n".join([f"- {f}" for f in loaded_files])
         
-        # PROMPT INSTRUKSI KHUSUS UNTUK MANAJEMEN FILE
-        system_prompt = f"""Kamu adalah Senior AI Programmer. 
+        # PROMPT INSTRUKSI KHUSUS UNTUK MANAJEMEN FILE & TERMINAL
+        system_prompt = f"""Kamu adalah Senior AI Programmer dan DevOps Engineer. 
 
 INFORMASI PROJECT SAAT INI:
 Berikut adalah daftar {file_count} file kodingan yang ada di workspace user saat ini:
@@ -119,9 +123,9 @@ Berikut adalah daftar {file_count} file kodingan yang ada di workspace user saat
 Gunakan konteks kodingan (hasil RAG) berikut untuk membantu menjawab pertanyaan user tentang detail kode:
 {konteks}
 
-ATURAN MANAJEMEN FILE:
-Kamu memiliki kemampuan untuk mengedit, membuat, menghapus, dan memindahkan file di komputer user. 
-Kamu WAJIB menggunakan format tag khusus berikut agar sistem operasi bisa mengeksekusi perintahmu:
+ATURAN MANAJEMEN FILE DAN TERMINAL:
+Kamu memiliki kemampuan penuh untuk memanipulasi file dan mengeksekusi perintah terminal. 
+Kamu WAJIB menggunakan format tag khusus berikut agar sistem bisa mengeksekusinya:
 
 1. UNTUK MEMBUAT FILE BARU ATAU MENGEDIT FILE YANG ADA:
 [SAVE: path/menuju/nama_file.ext]
@@ -132,12 +136,16 @@ Kamu WAJIB menggunakan format tag khusus berikut agar sistem operasi bisa mengek
 2. UNTUK MENGHAPUS FILE:
 [DELETE: path/menuju/nama_file.ext]
 
-3. UNTUK MEMINDAHKAN ATAU RENAME FILE (Ubah Struktur):
+3. UNTUK MEMINDAHKAN ATAU RENAME FILE:
 [MOVE: path/lama/file.ext -> path/baru/file.ext]
 
+4. UNTUK MENJALANKAN PERINTAH TERMINAL:
+[RUN: perintah_yang_ingin_dijalankan]
+(Contoh: [RUN: git status] atau [RUN: npm install axios])
+
 CATATAN PENTING:
-- Jika kamu menggunakan tag [SAVE], kamu HARUS memberikan keseluruhan isi file. Jangan gunakan placeholder seperti "sisa kode sebelumnya ada disini".
-- Gunakan tag ini sesuai dengan apa yang diminta user. Kamu bisa menggunakan lebih dari satu tag dalam satu jawaban jika diperlukan.
+- Jika kamu menggunakan tag [SAVE], kamu HARUS memberikan keseluruhan isi file tanpa dipotong. Jangan gunakan placeholder seperti "sisa kode sebelumnya ada disini".
+- Kamu bisa menggunakan lebih dari satu tag dalam satu jawaban. Misalnya, membuat file lalu menjalankan git commit.
 """
         
         # Siapkan struktur pesan untuk LLM
@@ -161,7 +169,7 @@ CATATAN PENTING:
         chat_history.append(AIMessage(content=jawaban))
         
         # ==========================================
-        # 6. PARSING DAN EKSEKUSI PERINTAH FILE
+        # 6. PARSING DAN EKSEKUSI PERINTAH
         # ==========================================
         
         # A. Logika SAVE (Membuat/Mengedit File)
@@ -172,7 +180,6 @@ CATATAN PENTING:
             filepath = filepath.strip()
             print(f"⏳ Mengeksekusi pembuatan/perubahan file: {filepath}")
             try:
-                # Bikin folder parent-nya kalau belum ada
                 folder_tujuan = os.path.dirname(filepath)
                 if folder_tujuan:
                     os.makedirs(folder_tujuan, exist_ok=True)
@@ -209,7 +216,6 @@ CATATAN PENTING:
             print(f"⏳ Memindahkan dari {old_path} ke {new_path}")
             try:
                 if os.path.exists(old_path):
-                    # Bikin folder tujuan kalau belum ada
                     folder_tujuan = os.path.dirname(new_path)
                     if folder_tujuan:
                         os.makedirs(folder_tujuan, exist_ok=True)
@@ -220,6 +226,40 @@ CATATAN PENTING:
                     print(f"⚠️ File sumber tidak ditemukan: {old_path}")
             except Exception as e:
                 print(f"❌ Gagal memindahkan {old_path}: {e}")
+
+        # D. Logika RUN (Menjalankan Perintah Terminal)
+        pattern_run = r"\[RUN:\s*(.+?)\]"
+        matches_run = re.findall(pattern_run, jawaban)
+        
+        for cmd in matches_run:
+            cmd = cmd.strip()
+            print(f"\n⚠️  PERINGATAN TERMINAL!")
+            print(f"🤖 AI meminta izin untuk mengeksekusi perintah berikut:")
+            print(f"👉 \033[93m{cmd}\033[0m") # Teks warna kuning untuk highlight command
+            
+            # FITUR KEAMANAN: Wajib konfirmasi user
+            konfirmasi = input("Izinkan eksekusi? (y/n): ").strip().lower()
+            
+            if konfirmasi == 'y':
+                print(f"⏳ Mengeksekusi: {cmd} ...")
+                try:
+                    result = subprocess.run(cmd, shell=True, text=True, capture_output=True)
+                    
+                    if result.stdout:
+                        print(f"✅ Output Terminal:\n{result.stdout.strip()}")
+                        # Memasukkan output sukses ke memori AI (opsional)
+                        chat_history.append(SystemMessage(content=f"Hasil eksekusi '{cmd}' sukses:\n{result.stdout}"))
+                        
+                    if result.stderr:
+                        print(f"❌ Error Terminal:\n{result.stderr.strip()}")
+                        # Memasukkan output error ke memori AI agar dia tahu salahnya dimana
+                        chat_history.append(SystemMessage(content=f"Hasil eksekusi '{cmd}' gagal dengan error:\n{result.stderr}"))
+                        
+                except Exception as e:
+                    print(f"❌ Sistem gagal menjalankan perintah: {e}")
+            else:
+                print("🛑 Eksekusi dibatalkan oleh user.")
+                chat_history.append(SystemMessage(content=f"User membatalkan eksekusi perintah '{cmd}'."))
                 
     except Exception as e:
         print(f"❌ Terjadi kesalahan pada sistem agen: {e}")
