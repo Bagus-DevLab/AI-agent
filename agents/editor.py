@@ -4,13 +4,24 @@ Hanya mengambil potongan kode yang relevan untuk menghemat token.
 """
 
 import os
-import sys
 import re
-import shutil
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 from config import get_llm, get_embeddings, SYSTEM_PROMPT_EDITOR
 from utils.scanner import scan_workspace
 from utils.vectorstore import build_vectorstore, get_retriever
+
+# Base directory project — semua operasi file dibatasi di sini
+BASE_DIR = os.path.abspath(os.getcwd())
+
+
+def is_safe_path(filepath: str) -> bool:
+    """
+    Memastikan filepath target tetap berada di dalam BASE_DIR (Security Sandbox).
+    Mencegah path traversal seperti ../../etc/passwd atau path absolut di luar project.
+    """
+    target_abs = os.path.abspath(filepath)
+    return target_abs.startswith(BASE_DIR)
+
 
 def execute_file_operations(ai_response):
     """Mencari dan mengeksekusi perintah manipulasi file dengan konfirmasi."""
@@ -21,10 +32,18 @@ def execute_file_operations(ai_response):
     save_matches = re.findall(save_pattern, ai_response, re.DOTALL)
     for filepath, content in save_matches:
         filepath = filepath.strip()
+
+        # SECURITY FIX: Validasi path sebelum menyimpan
+        if not is_safe_path(filepath):
+            print(f"🚫 Ditolak: '{filepath}' berada di luar area project. Operasi dibatalkan.")
+            continue
+
         konfirmasi = input(f"\n💾 Simpan perubahan ke '{filepath}'? (y/n): ").strip().lower()
         if konfirmasi == 'y':
             try:
-                os.makedirs(os.path.dirname(filepath), exist_ok=True) if os.path.dirname(filepath) else None
+                # BUG FIX: Gunakan os.path.dirname yang aman untuk semua kasus
+                parent_dir = os.path.dirname(os.path.abspath(filepath))
+                os.makedirs(parent_dir, exist_ok=True)
                 with open(filepath, "w", encoding="utf-8") as f:
                     f.write(content)
                 print(f"✅ Berhasil mengupdate {filepath}")
@@ -37,6 +56,12 @@ def execute_file_operations(ai_response):
     delete_matches = re.findall(delete_pattern, ai_response)
     for filepath in delete_matches:
         filepath = filepath.strip()
+
+        # SECURITY FIX: Validasi path sebelum menghapus
+        if not is_safe_path(filepath):
+            print(f"🚫 Ditolak: '{filepath}' berada di luar area project. Operasi dibatalkan.")
+            continue
+
         konfirmasi = input(f"\n🗑️  Hapus file '{filepath}'? (y/n): ").strip().lower()
         if konfirmasi == 'y' and os.path.exists(filepath):
             os.remove(filepath)
