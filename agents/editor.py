@@ -86,36 +86,27 @@ def is_safe_path(filepath: str) -> bool:
 
 
 def extract_save_blocks(ai_response: str):
-    """Parser nesting-aware untuk ekstrak blok [SAVE: path] beserta isinya."""
+    """Parser yang lebih tangguh terhadap self-quoting dan format markdown."""
     results = []
-    save_tags = list(re.finditer(r'\[SAVE:\s*(.+?)\]', ai_response))
+    
+    # 1. Regex ini mencari [SAVE: path] di awal baris
+    # 2. Mengambil semua konten (re.DOTALL)
+    # 3. Berhenti HANYA pada [/SAVE] yang berada tepat di awal baris baru
+    pattern = r'^\[SAVE:\s*(.+?)\]\n(.*?)\n^\[/SAVE\]'
+    matches = re.finditer(pattern, ai_response, re.DOTALL | re.MULTILINE)
 
-    for tag in save_tags:
-        filepath = tag.group(1).strip()
-        after_tag = ai_response[tag.end():]
+    for match in matches:
+        filepath = match.group(1).strip()
+        content = match.group(2).strip()
 
-        open_match = re.match(r'\s*```(\w*)\n', after_tag)
-        if not open_match:
-            continue
+        # Bersihkan pembungkus markdown (```) jika AI menambahkannya
+        if content.startswith("```"):
+            content = re.sub(r'^```\w*\n', '', content)
+            if content.endswith("```"):
+                content = content[:-3].strip()
 
-        content_after = after_tag[open_match.end():]
-        lines = content_after.split('\n')
-
-        depth = 1
-        content_lines = []
-        for line in lines:
-            if re.match(r'^```\w+', line):   
-                depth += 1
-                content_lines.append(line)
-            elif re.match(r'^```\s*$', line): 
-                depth -= 1
-                if depth == 0:
-                    break
-                content_lines.append(line)
-            else:
-                content_lines.append(line)
-
-        results.append((filepath, '\n'.join(content_lines)))
+        results.append((filepath, content))
+        
     return results
 
 
@@ -146,8 +137,8 @@ def execute_file_operations(ai_response):
                 print(f"❌ Gagal menyimpan {filepath}: {e}")
 
     # 2. Eksekusi perintah DELETE
-    delete_pattern = r"\[DELETE:\s*(.+?)\]"
-    delete_matches = re.findall(delete_pattern, ai_response)
+    delete_pattern = r"^\[DELETE:\s*(.+?)\]"
+    delete_matches = re.findall(delete_pattern, ai_response, re.MULTILINE)    
     for filepath in delete_matches:
         filepath = filepath.strip()
 

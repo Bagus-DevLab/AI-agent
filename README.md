@@ -60,33 +60,157 @@ An intelligent AI-powered code assistant that can **read, analyze, and edit** yo
 
 ---
 
-## ⚙️ Setup
+## 📦 Cara Instalasi
 
-1. **Clone repository**
-   ```bash
-   git clone <repo-url>
-   cd <project-folder>
-   ```
+Ikuti langkah-langkah berikut untuk menginstal dan menjalankan project ini di mesin lokal Anda.
 
-2. **Install dependencies**
-   ```bash
-   pip install -r requirements.txt
-   ```
+### 1. Prasyarat (Prerequisites)
 
-3. **Konfigurasi environment**
-   ```bash
-   cp .env.example .env
-   # Edit .env dan masukkan API key yang diperlukan
-   ```
+Pastikan sistem Anda sudah memiliki:
 
-4. **Jalankan agent**
-   ```bash
-   # RAG Agent (read-only Q&A)
-   python -m agents.rag
+| Software | Versi Minimum | Cek Versi |
+|----------|---------------|-----------|
+| **Python** | 3.9+ | `python --version` |
+| **pip** | 21.0+ | `pip --version` |
+| **Git** | 2.0+ | `git --version` |
 
-   # Editor Agent (read + write)
-   python -m agents.editor
-   ```
+> 💡 **Tip:** Disarankan menggunakan Python 3.10 atau 3.11 untuk kompatibilitas terbaik dengan library FAISS dan LangChain.
+
+### 2. Clone Repository
+
+```bash
+git clone <repo-url>
+cd <project-folder>
+```
+
+### 3. Buat Virtual Environment (Disarankan)
+
+Membuat virtual environment akan mengisolasi dependensi project agar tidak bentrok dengan package Python lain di sistem Anda.
+
+**Linux / macOS:**
+```bash
+python -m venv venv
+source venv/bin/activate
+```
+
+**Windows (Command Prompt):**
+```bash
+python -m venv venv
+venv\Scripts\activate
+```
+
+**Windows (PowerShell):**
+```bash
+python -m venv venv
+venv\Scripts\Activate.ps1
+```
+
+> ✅ Jika berhasil, Anda akan melihat `(venv)` di awal baris terminal.
+
+### 4. Install Dependencies
+
+```bash
+pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+**Daftar dependensi utama yang akan terinstal:**
+
+| Package | Fungsi |
+|---------|--------|
+| `langchain` | Framework LLM & chaining |
+| `langchain-community` | Integrasi komunitas LangChain |
+| `faiss-cpu` | Vector similarity search (FAISS) |
+| `openai` / `google-generativeai` | LLM API client |
+| `python-dotenv` | Membaca file `.env` |
+| `tiktoken` | Tokenizer untuk embedding |
+
+> ⚠️ Jika Anda menggunakan GPU dan ingin performa lebih cepat, ganti `faiss-cpu` dengan `faiss-gpu`:
+> ```bash
+> pip install faiss-gpu
+> ```
+
+### 5. Konfigurasi Environment Variables
+
+Buat file `.env` di root project:
+
+```bash
+cp .env.example .env
+```
+
+Kemudian buka file `.env` dan isi API key yang diperlukan:
+
+```env
+# Pilih salah satu atau sesuaikan dengan LLM yang digunakan:
+
+# OpenAI
+OPENAI_API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+# Google Gemini
+GOOGLE_API_KEY=AIzaXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+```
+
+> 🔒 **Penting:** File `.env` sudah termasuk dalam daftar file yang di-skip oleh scanner, sehingga API key Anda **tidak akan pernah ter-index** ke dalam vector store.
+
+### 6. Verifikasi Instalasi
+
+Jalankan perintah berikut untuk memastikan semua terinstal dengan benar:
+
+```bash
+# Cek apakah semua package terinstal
+pip list | grep -E "langchain|faiss|openai|dotenv"
+
+# Jalankan quick test
+python -c "import langchain; import faiss; print('✅ Semua dependensi terinstal dengan benar!')"
+```
+
+### 7. Jalankan Agent
+
+```bash
+# RAG Agent (read-only Q&A tentang codebase)
+python -m agents.rag
+
+# Editor Agent (read + write — bisa membaca dan mengedit file)
+python -m agents.editor
+```
+
+### 🔧 Troubleshooting Instalasi
+
+<details>
+<summary><b>❌ Error: <code>ModuleNotFoundError: No module named 'faiss'</code></b></summary>
+
+```bash
+pip install faiss-cpu
+# atau untuk GPU:
+pip install faiss-gpu
+```
+</details>
+
+<details>
+<summary><b>❌ Error: <code>No API key found</code></b></summary>
+
+Pastikan file `.env` sudah ada di root project dan berisi API key yang valid. Cek juga apakah `python-dotenv` sudah terinstal:
+```bash
+pip install python-dotenv
+```
+</details>
+
+<details>
+<summary><b>❌ Error: <code>pip install gagal di Windows</code></b></summary>
+
+Coba gunakan:
+```bash
+pip install --upgrade pip setuptools wheel
+pip install -r requirements.txt
+```
+Jika masih gagal, pastikan Anda menggunakan Python 3.9+ dan bukan versi Python dari Microsoft Store.
+</details>
+
+<details>
+<summary><b>❌ FAISS index error saat pertama kali jalan</b></summary>
+
+Ini normal! Saat pertama kali dijalankan, agent akan otomatis membuat folder `faiss_index/` dan melakukan embedding. Pastikan koneksi internet aktif untuk mengakses API embedding.
+</details>
 
 ---
 
@@ -154,4 +278,3 @@ User Input
 ## 📄 License
 
 MIT
----
