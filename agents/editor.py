@@ -14,23 +14,55 @@ from utils.vectorstore import build_vectorstore, get_retriever
 # Base directory project — semua operasi file dibatasi di sini
 BASE_DIR = os.path.abspath(os.getcwd())
 
-# FIX B: Kata kunci yang mengindikasikan query umum/broad
-# Kalau query mengandung salah satu kata ini, inject full file list
-BROAD_QUERY_KEYWORDS = {
-    "semua file", "all file", "daftar file", "list file",
-    "struktur project", "project structure", "apa saja file",
-    "file apa saja", "jelaskan semua", "explain all",
-    "overview", "rangkuman project", "summary project",
+# FIX B (improved): Deteksi broad query pakai dua lapis filter:
+# 1. BROAD_SUBJECTS — kata yang merujuk ke keseluruhan project/file
+# 2. BROAD_ACTIONS  — kata yang merujuk ke aksi lihat/jelaskan/tampilkan
+# Query dianggap broad kalau mengandung min 1 kata dari SETIAP kelompok,
+# ATAU mengandung keyword eksplisit di BROAD_EXPLICIT.
+
+BROAD_SUBJECTS = {
+    # Bahasa Indonesia
+    "file", "folder", "direktori", "struktur", "project",
+    "codebase", "kode", "semua", "seluruh", "keseluruhan",
+    "index", "terindex", "di-index", "yang ada", "apa saja",
+    # Bahasa Inggris
+    "files", "folders", "directory", "structure", "all",
+    "entire", "whole", "indexed",
+}
+
+BROAD_ACTIONS = {
+    # Bahasa Indonesia
+    "jelaskan", "tampilkan", "tunjukkan", "lihat", "list",
+    "daftar", "rangkum", "ringkas", "ceritakan", "sebutkan",
+    "gambarkan", "apa", "berapa",
+    # Bahasa Inggris
+    "explain", "show", "describe", "summarize",
+    "what", "display",
+}
+
+# Keyword eksplisit yang langsung trigger broad query tanpa perlu 2 kata
+BROAD_EXPLICIT = {
+    "overview", "struktur project", "project structure",
+    "rangkuman project", "summary project", "semua file",
+    "all files", "file list", "daftar file",
 }
 
 
 def is_broad_query(query: str) -> bool:
     """
-    FIX B: Deteksi apakah query bersifat umum/broad.
-    Kalau iya, gunakan full file list bukan RAG retrieval.
+    Deteksi apakah query bersifat umum/broad menggunakan dua lapis filter.
+    Broad = ada kata subjek umum DAN kata aksi, atau keyword eksplisit.
     """
     query_lower = query.lower()
-    return any(keyword in query_lower for keyword in BROAD_QUERY_KEYWORDS)
+
+    # Cek keyword eksplisit dulu (paling cepat)
+    if any(kw in query_lower for kw in BROAD_EXPLICIT):
+        return True
+
+    # Cek kombinasi subjek + aksi
+    has_subject = any(word in query_lower for word in BROAD_SUBJECTS)
+    has_action = any(word in query_lower for word in BROAD_ACTIONS)
+    return has_subject and has_action
 
 
 def build_file_overview(folder_path: str, docs: list) -> str:
