@@ -53,8 +53,8 @@ def load_dari_cloud(s3, chat_history: list) -> list:
 
 def simpan_ke_cloud(s3, chat_history: list):
     """
-    Serialisasi history dan upload ke R2.
-    FIX: Upload hanya dipanggil saat exit, bukan setiap pesan.
+    Serialisasi history, simpan ke lokal, lalu upload ke R2.
+    Memisahkan langkah tulis lokal dan upload agar error bisa dibedakan.
     """
     serializable = [
         {"role": "user" if isinstance(m, HumanMessage) else "ai", "content": m.content}
@@ -62,15 +62,30 @@ def simpan_ke_cloud(s3, chat_history: list):
         if not isinstance(m, SystemMessage)
     ]
 
-    # FIX: Terapkan sliding window agar tidak tak terbatas
+    # Terapkan sliding window agar tidak tak terbatas
     if len(serializable) > MAX_MEMORY_MESSAGES:
         serializable = serializable[-MAX_MEMORY_MESSAGES:]
 
-    with open(FILE_LOKAL, "w", encoding="utf-8") as f:
-        json.dump(serializable, f, indent=2, ensure_ascii=False)
+    # Step 1: Tulis ke file lokal dulu
+    try:
+        with open(FILE_LOKAL, "w", encoding="utf-8") as f:
+            json.dump(serializable, f, indent=2, ensure_ascii=False)
+    except (IOError, OSError) as e:
+        raise IOError(f"Gagal menulis file lokal '{FILE_LOKAL}': {e}")
 
-    s3.upload_file(FILE_LOKAL, R2_BUCKET_NAME, FILE_REMOTE)
-    print("☁️  Memori berhasil disimpan ke cloud.")
+    # Step 2: Upload ke R2 — boto3 upload_file bisa raise ClientError atau Exception
+    try:
+        s3.upload_file(FILE_LOKAL, R2_BUCKET_NAME, FILE_REMOTE)
+        print("☁️  Memori berhasil disimpan ke cloud.")
+    except ClientError as e:
+        error_code = e.response.get("Error", {}).get("Code", "Unknown")
+        raise ClientError(
+            e.response,
+            f"Upload ke R2 gagal (kode: {error_code}) — cek credential dan permission bucket"
+        )
+    except Exception as e:
+        # boto3 kadang wrap error dalam Exception biasa, bukan ClientError
+        raise RuntimeError(f"Upload ke R2 gagal: {e}")
 
 
 def cleanup_temp():
@@ -140,12 +155,18 @@ def main():
                 chat_history.pop()
 
     finally:
-        # FIX: Upload SEKALI saat exit (bukan tiap pesan) + cleanup temp file
+        # Upload SEKALI saat exit + cleanup temp file
         print("\n💾 Menyimpan memori ke cloud...")
         try:
             simpan_ke_cloud(s3, chat_history)
         except (ClientError, BotoCoreError) as e:
-            print(f"⚠️  Gagal upload ke R2: {e}")
+            error_code = e.response.get("Error", {}).get("Code", "Unknown")
+            print(f"⚠️  Gagal upload ke R2 (kode: {error_code}): {e}")
+            print("   Tips: cek R2_ACCESS_KEY, R2_SECRET_KEY, dan permission bucket di .env")
+        except RuntimeError as e:
+            # boto3 kadang wrap error dalam Exception biasa
+            print(f"⚠️  {e}")
+            print("   Tips: cek R2_ACCESS_KEY, R2_SECRET_KEY, dan permission bucket di .env")
         except (IOError, OSError) as e:
             print(f"⚠️  Gagal menulis file lokal: {e}")
         finally:
