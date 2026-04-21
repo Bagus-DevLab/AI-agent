@@ -1,139 +1,139 @@
 """
-agents/editor.py — Agent dengan kemampuan membaca, membuat, dan mengedit file.
-Mendukung operasi [SAVE], [DELETE], [MOVE], dan [RUN].
+agents/editor.py — Agent dengan kemampuan membaca, menulis, dan mengelola file.
+Mendukung operasi otomatis via tag [SAVE], [DELETE], dan [MOVE] dengan konfirmasi user.
 """
 
 import os
+import sys
 import re
 import shutil
-import subprocess
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 from config import get_llm, SYSTEM_PROMPT_EDITOR
 from utils.scanner import scan_workspace
 
-def execute_file_operations(ai_response, chat_history):
+def execute_file_operations(ai_response):
     """
-    Mem-parsing dan mengeksekusi operasi file/terminal dari respons AI.
+    Mencari dan mengeksekusi perintah manipulasi file dari jawaban AI dengan konfirmasi manual.
+    Format yang didukung: [SAVE: path], [DELETE: path], [MOVE: old -> new]
     """
-    struktur_berubah = False
-    
-    # 1. Logika SAVE (Membuat/Mengedit File)
+    changes_made = []
+
+    # 1. Logika SAVE (Simpan/Update File)
+    # Mencari pola: [SAVE: path/file.py] ```code```
     save_pattern = r"\[SAVE:\s*(.+?)\]\s*```[a-zA-Z]*\n(.*?)```"
-    matches_save = re.findall(save_pattern, ai_response, re.DOTALL)
-    for filepath, code_content in matches_save:
+    save_matches = re.findall(save_pattern, ai_response, re.DOTALL)
+    
+    for filepath, content in save_matches:
         filepath = filepath.strip()
-        print(f"⏳ Mengeksekusi SAVE: {filepath}")
-        try:
-            os.makedirs(os.path.dirname(filepath), exist_ok=True) if os.path.dirname(filepath) else None
-            with open(filepath, "w", encoding="utf-8") as f:
-                f.write(code_content)
-            print(f"✅ Berhasil menyimpan: {filepath}")
-            struktur_berubah = True
-        except Exception as e:
-            print(f"❌ Gagal menyimpan {filepath}: {e}")
-
-    # 2. Logika DELETE (Menghapus File)
-    delete_pattern = r"\[DELETE:\s*(.+?)\]"
-    matches_delete = re.findall(delete_pattern, ai_response)
-    for filepath in matches_delete:
-        filepath = filepath.strip()
-        print(f"⏳ Mengeksekusi DELETE: {filepath}")
-        try:
-            if os.path.exists(filepath):
-                os.remove(filepath)
-                print(f"🗑️ Berhasil menghapus: {filepath}")
-                struktur_berubah = True
-            else:
-                print(f"⚠️ File tidak ditemukan: {filepath}")
-        except Exception as e:
-            print(f"❌ Gagal menghapus {filepath}: {e}")
-
-    # 3. Logika MOVE (Memindahkan/Rename File)
-    move_pattern = r"\[MOVE:\s*(.+?)\s*->\s*(.+?)\]"
-    matches_move = re.findall(move_pattern, ai_response)
-    for old_path, new_path in matches_move:
-        old_path, new_path = old_path.strip(), new_path.strip()
-        print(f"⏳ Mengeksekusi MOVE dari {old_path} ke {new_path}")
-        try:
-            if os.path.exists(old_path):
-                os.makedirs(os.path.dirname(new_path), exist_ok=True) if os.path.dirname(new_path) else None
-                shutil.move(old_path, new_path)
-                print(f"🚚 Berhasil memindahkan ke: {new_path}")
-                struktur_berubah = True
-            else:
-                print(f"⚠️ File sumber tidak ditemukan: {old_path}")
-        except Exception as e:
-            print(f"❌ Gagal memindahkan {old_path}: {e}")
-
-    # 4. Logika RUN (Menjalankan Terminal)
-    run_pattern = r"\[RUN:\s*(.+?)\]"
-    matches_run = re.findall(run_pattern, ai_response)
-    for cmd in matches_run:
-        cmd = cmd.strip()
-        print(f"\n⚠️  PERINGATAN TERMINAL! AI ingin menjalankan: \033[93m{cmd}\033[0m")
-        konfirmasi = input("Izinkan eksekusi? (y/n): ").strip().lower()
+        konfirmasi = input(f"\n💾 Simpan perubahan ke '{filepath}'? (y/n): ").strip().lower()
+        
         if konfirmasi == 'y':
             try:
-                result = subprocess.run(cmd, shell=True, text=True, capture_output=True)
-                if result.stdout:
-                    print(f"✅ Output:\n{result.stdout.strip()}")
-                    chat_history.append(SystemMessage(content=f"Eksekusi '{cmd}' sukses:\n{result.stdout}"))
-                if result.stderr:
-                    print(f"❌ Error:\n{result.stderr.strip()}")
-                    chat_history.append(SystemMessage(content=f"Eksekusi '{cmd}' gagal:\n{result.stderr}"))
-                struktur_berubah = True
+                # Buat folder jika belum ada
+                os.makedirs(os.path.dirname(filepath), exist_ok=True) if os.path.dirname(filepath) else None
+                with open(filepath, "w", encoding="utf-8") as f:
+                    f.write(content)
+                print(f"✅ Berhasil mengupdate {filepath}")
+                changes_made.append(f"SAVE: {filepath}")
             except Exception as e:
-                print(f"❌ Gagal menjalankan perintah: {e}")
-    
-    return struktur_berubah
+                print(f"❌ Gagal menyimpan {filepath}: {e}")
+        else:
+            print(f"⏭️  Perubahan pada {filepath} dibatalkan.")
 
-def main(folder_path="."):
-    print("=== AI FILE EDITOR & DEVOPS AGENT ===\n")
+    # 2. Logika DELETE (Hapus File)
+    delete_pattern = r"\[DELETE:\s*(.+?)\]"
+    delete_matches = re.findall(delete_pattern, ai_response)
+    for filepath in delete_matches:
+        filepath = filepath.strip()
+        konfirmasi = input(f"\n🗑️  Hapus file '{filepath}' secara permanen? (y/n): ").strip().lower()
+        
+        if konfirmasi == 'y':
+            try:
+                if os.path.exists(filepath):
+                    os.remove(filepath)
+                    print(f"✅ Berhasil menghapus {filepath}")
+                    changes_made.append(f"DELETE: {filepath}")
+                else:
+                    print(f"⚠️  File tidak ditemukan: {filepath}")
+            except Exception as e:
+                print(f"❌ Gagal menghapus {filepath}: {e}")
+        else:
+            print(f"⏭️  Penghapusan {filepath} dibatalkan.")
+
+    # 3. Logika MOVE (Pindah/Rename File)
+    move_pattern = r"\[MOVE:\s*(.+?)\s*->\s*(.+?)\]"
+    move_matches = re.findall(move_pattern, ai_response)
+    for old_path, new_path in move_matches:
+        old_path, new_path = old_path.strip(), new_path.strip()
+        konfirmasi = input(f"\n🚚 Pindahkan '{old_path}' -> '{new_path}'? (y/n): ").strip().lower()
+        
+        if konfirmasi == 'y':
+            try:
+                if os.path.exists(old_path):
+                    os.makedirs(os.path.dirname(new_path), exist_ok=True) if os.path.dirname(new_path) else None
+                    shutil.move(old_path, new_path)
+                    print(f"✅ Berhasil memindahkan ke {new_path}")
+                    changes_made.append(f"MOVE: {old_path} -> {new_path}")
+                else:
+                    print(f"⚠️  Sumber tidak ditemukan: {old_path}")
+            except Exception as e:
+                print(f"❌ Gagal memindahkan {old_path}: {e}")
+        else:
+            print(f"⏭️  Pemindahan {old_path} dibatalkan.")
+
+    return changes_made
+
+def main():
+    print("=== 🛠️ AI FILE EDITOR (READ & WRITE) READY! ===")
     
+    # Ambil folder target dari argumen atau default ke folder saat ini
+    folder_path = sys.argv[1] if len(sys.argv) > 1 else "."
+    print(f"📂 Workspace: {folder_path}")
+
     llm = get_llm(temperature=0.2)
-    chat_history = [SystemMessage(content=SYSTEM_PROMPT_EDITOR)]
     
-    # Initial scan
-    docs, file_count = scan_workspace(folder_path)
-    loaded_files = [d['path'] for d in docs]
+    # 1. SCAN SELURUH ISI KODE (Agar AI bisa 'Membaca')
+    print("📥 Membaca seluruh isi kodingan...")
+    docs, count = scan_workspace(folder_path)
     
-    print(f"✅ Berhasil memuat {file_count} file kodingan.")
+    # Gabungkan semua kode ke dalam satu string konteks
+    context_code = ""
+    for d in docs:
+        context_code += f"\n--- FILE: {d['path']} ---\n{d['content']}\n"
+
+    # Inisialisasi percakapan dengan System Prompt + Konteks Kode
+    messages = [
+        SystemMessage(content=SYSTEM_PROMPT_EDITOR + "\n\nBERIKUT ADALAH ISI KODE SAAT INI:\n" + context_code)
+    ]
+
+    print(f"✅ {count} file berhasil dimuat ke memori AI.")
     print("Ketik 'exit' untuk keluar.\n")
 
     while True:
-        try:
-            user_input = input("Lu: ").strip()
-        except KeyboardInterrupt:
-            break
-            
+        user_input = input("Lu: ").strip()
         if user_input.lower() == "exit":
+            print("Bye! 👋")
             break
         if not user_input:
             continue
 
-        # Berikan daftar file ke AI agar dia tahu strukturnya
-        file_list_str = "\n".join([f"- {f}" for f in loaded_files])
-        prompt = f"STRUKTUR PROJECT SAAT INI:\n{file_list_str}\n\nPertanyaan User: {user_input}"
-        
-        chat_history.append(HumanMessage(content=prompt))
+        messages.append(HumanMessage(content=user_input))
 
-        print("AI sedang memproses...")
+        print("AI sedang menganalisis dan bekerja...")
         try:
-            response = llm.invoke(chat_history)
-            jawaban = response.content
-            chat_history.append(AIMessage(content=jawaban))
+            response = llm.invoke(messages)
+            ai_text = response.content
+            print(f"\nAI:\n{ai_text}\n")
+
+            # 2. EKSEKUSI PERUBAHAN (Agar AI bisa 'Menulis/Mengubah')
+            ops = execute_file_operations(ai_text)
+            if ops:
+                print(f"\n🎉 Selesai! Berhasil melakukan {len(ops)} perubahan file.")
             
-            print(f"\nAI: {jawaban}\n")
+            messages.append(AIMessage(content=ai_text))
             
-            # Eksekusi aksi jika ada
-            if execute_file_operations(jawaban, chat_history):
-                # Refresh workspace jika ada perubahan struktur
-                docs, file_count = scan_workspace(folder_path)
-                loaded_files = [d['path'] for d in docs]
-                print(f"🔄 Workspace di-refresh ({file_count} file sekarang terbaca).")
-                
         except Exception as e:
-            print(f"❌ Error: {e}")
+            print(f"❌ Terjadi kesalahan: {e}")
 
 if __name__ == "__main__":
     main()
