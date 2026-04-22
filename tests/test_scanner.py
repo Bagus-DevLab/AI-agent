@@ -218,6 +218,30 @@ class TestShouldSkipFile:
     def test_normal_files_not_skipped(self, filename):
         assert should_skip_file(filename) is False
 
+    # --- .env variant tests (H2 fix) ---
+
+    @pytest.mark.parametrize("filename", [
+        ".env.production",
+        ".env.staging",
+        ".env.development",
+        ".env.test",
+        ".env.secret",
+        ".env.backup",
+    ])
+    def test_env_variants_skipped(self, filename):
+        """Semua varian .env.* harus di-skip untuk mencegah kebocoran secret."""
+        assert should_skip_file(filename) is True
+
+    def test_env_without_dot_suffix_not_skipped(self):
+        """File seperti .environment tidak boleh ter-skip (bukan .env.*)."""
+        assert should_skip_file(".environment") is False
+
+    def test_env_exact_match(self):
+        """File .env harus di-skip."""
+        assert should_skip_file(".env") is True
+
+    # --- Existing tests ---
+
     def test_editor_prefix_without_json_suffix(self):
         """editor_foo.py should NOT be skipped (wrong suffix)."""
         assert should_skip_file("editor_foo.py") is False
