@@ -62,13 +62,14 @@ def simpan_memori_lokal(history, path="chat_memory.json"):
         history: List of LangChain messages
         path: Path ke file memori JSON
     """
-    # Filter hanya pesan user dan AI (bukan SystemMessage)
+    # Filter hanya pesan user dan AI (skip SystemMessage dan tipe lain)
     data = []
     for m in history:
-        if isinstance(m, SystemMessage):
-            continue
-        role = "user" if isinstance(m, HumanMessage) else "ai"
-        data.append({"role": role, "content": m.content})
+        if isinstance(m, HumanMessage):
+            data.append({"role": "user", "content": m.content})
+        elif isinstance(m, AIMessage):
+            data.append({"role": "ai", "content": m.content})
+        # Skip SystemMessage dan tipe lain (ToolMessage, FunctionMessage, dll.)
 
     # Terapkan sliding window — simpan hanya N pesan terakhir
     if len(data) > MAX_MEMORY_MESSAGES:

@@ -68,15 +68,10 @@ class TestIsSafePath:
         except OSError:
             pytest.skip("Cannot create symlinks on this system")
 
-    def test_relative_path_inside(self):
+    def test_relative_path_inside(self, monkeypatch):
         """Relative path that resolves inside BASE_DIR."""
-        # Change to base dir context
-        original_cwd = os.getcwd()
-        try:
-            os.chdir(str(self.base))
-            assert editor_module.is_safe_path("./src/main.py") is True
-        finally:
-            os.chdir(original_cwd)
+        monkeypatch.chdir(str(self.base))
+        assert editor_module.is_safe_path("./src/main.py") is True
 
     def test_empty_string(self):
         """Empty string resolves to cwd — may or may not be inside BASE_DIR."""

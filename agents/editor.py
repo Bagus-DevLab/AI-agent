@@ -11,6 +11,7 @@ from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 from config import get_llm, get_embeddings, SYSTEM_PROMPT_EDITOR, validate_config, MAX_MEMORY_MESSAGES
 from utils.scanner import scan_workspace, get_file_list
 from utils.vectorstore import build_vectorstore, get_retriever
+from utils.security import is_safe_path as _is_safe_path
 
 # Base directory — di-update dinamis di main()
 BASE_DIR = os.path.abspath(os.getcwd())
@@ -79,9 +80,7 @@ def build_file_overview(folder_path: str, docs: list) -> str:
 # ==========================================
 def is_safe_path(filepath: str) -> bool:
     """Pastikan filepath berada di dalam BASE_DIR (security sandbox)."""
-    target_abs = os.path.realpath(os.path.abspath(filepath))
-    base_abs = os.path.realpath(BASE_DIR)
-    return target_abs == base_abs or target_abs.startswith(base_abs + os.sep)
+    return _is_safe_path(filepath, BASE_DIR)
 
 
 # ==========================================

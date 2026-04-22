@@ -16,6 +16,13 @@ Fitur utama:
 """
 
 import os
+from typing import TypedDict
+
+
+class ScannedFile(TypedDict):
+    """Struktur data untuk file hasil scan workspace."""
+    path: str
+    content: str
 
 # ============================================================================
 # 🚫 KONSTANTA — FILE YANG DI-SKIP (EXACT MATCH)
@@ -114,9 +121,10 @@ def should_skip_file(filename: str) -> bool:
     """
     Cek apakah file harus di-skip dari scanning.
 
-    Mengecek dua hal:
+    Mengecek tiga hal:
     1. Exact match dengan SKIP_FILE_PATTERNS
-    2. Prefix+suffix match dengan SKIP_FILE_PREFIXES
+    2. Semua varian .env (`.env`, `.env.*`) — mencegah kebocoran secret
+    3. Prefix+suffix match dengan SKIP_FILE_PREFIXES
 
     Args:
         filename: Nama file (tanpa path, hanya basename)
@@ -128,7 +136,11 @@ def should_skip_file(filename: str) -> bool:
     if filename in SKIP_FILE_PATTERNS:
         return True
 
-    # 2. Prefix + suffix pattern match
+    # 2. Skip semua varian .env (e.g. .env.production, .env.staging, dll.)
+    if filename == ".env" or filename.startswith(".env."):
+        return True
+
+    # 3. Prefix + suffix pattern match
     for prefix, suffix in SKIP_FILE_PREFIXES:
         if filename.startswith(prefix) and filename.endswith(suffix):
             return True
@@ -140,8 +152,7 @@ def should_skip_file(filename: str) -> bool:
 # 🔍 FUNGSI UTAMA — SCAN DIRECTORY
 # ============================================================================
 
-# Ubah baris def-nya jadi begini:
-def scan_workspace(folder_path: str = ".") -> tuple[list[dict], int]:
+def scan_workspace(folder_path: str = ".") -> tuple[list[ScannedFile], int]:
     """
     Scan direktori secara rekursif dan baca semua file source code.
 
@@ -150,10 +161,10 @@ def scan_workspace(folder_path: str = ".") -> tuple[list[dict], int]:
 
     Returns:
         Tuple berisi:
-        - list[dict]: List of {"path": relative_path, "content": file_content}
+        - list[ScannedFile]: List of {"path": relative_path, "content": file_content}
         - int: Jumlah file yang berhasil di-scan
     """
-    results: list[dict] = []
+    results: list[ScannedFile] = []
     folder_path = os.path.abspath(folder_path)
 
     for root, dirs, files in os.walk(folder_path):
@@ -230,6 +241,14 @@ def get_file_list(folder_path: str = ".") -> list[str]:
 
             # Catat path-nya
             filepath = os.path.join(root, filename)
+
+            # Cek ukuran file (konsisten dengan scan_workspace)
+            try:
+                if os.path.getsize(filepath) > MAX_FILE_SIZE:
+                    continue
+            except OSError:
+                continue
+
             rel_path = os.path.relpath(filepath, folder_path)
             
             if not rel_path.startswith("."):

@@ -34,6 +34,11 @@ def simpan_memori_lokal(*args, **kwargs):
     return _simpan(*args, **kwargs)
 
 
+def is_safe_path(*args, **kwargs):
+    from utils.security import is_safe_path as _safe
+    return _safe(*args, **kwargs)
+
+
 __all__ = [
     "scan_workspace",
     "get_file_list",
@@ -41,4 +46,5 @@ __all__ = [
     "get_retriever",
     "load_memori_lokal",
     "simpan_memori_lokal",
+    "is_safe_path",
 ]

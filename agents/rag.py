@@ -8,25 +8,14 @@ from langchain_core.messages import SystemMessage, HumanMessage
 from config import get_llm, get_embeddings, SYSTEM_PROMPT_RAG, validate_config, BASE_DIR
 from utils.scanner import scan_workspace
 from utils.vectorstore import build_vectorstore, get_retriever, save_vectorstore, load_vectorstore
+from utils.security import is_safe_path as _is_safe_path
 
 # Gunakan BASE_DIR dari config agar konsisten (bukan os.getcwd() saat import)
 
 
 def is_safe_path(path: str) -> bool:
-    """
-    Memastikan path target tetap berada di dalam BASE_DIR (Security Sandbox).
-    
-    FIX 1: Gunakan os.path.realpath() untuk resolve symlinks.
-    FIX 2: Gunakan os.sep untuk mencegah prefix bypass 
-           (e.g., /home/user/project_evil vs /home/user/project).
-    """
-    # Resolve symlinks DAN normalize path
-    target_abs = os.path.realpath(os.path.abspath(path))
-    base_abs = os.path.realpath(BASE_DIR)
-
-    # Pastikan path berada di dalam BASE_DIR dengan separator check
-    # Ini mencegah /home/user/project_evil lolos dari check /home/user/project
-    return target_abs == base_abs or target_abs.startswith(base_abs + os.sep)
+    """Memastikan path target tetap berada di dalam BASE_DIR (Security Sandbox)."""
+    return _is_safe_path(path, BASE_DIR)
 
 
 def main():
@@ -45,7 +34,7 @@ def main():
 
     # Coba load existing vectorstore, atau buat baru
     print("📂 Memuat workspace...")
-    vectorstore = load_vectorstore(embeddings)
+    vectorstore = load_vectorstore()
 
     if vectorstore is None:
         print("🔨 Membuat index baru...")
