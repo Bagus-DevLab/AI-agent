@@ -1,9 +1,9 @@
 """
 agents/ — Package untuk semua AI agents.
-Menggunakan lazy import untuk menghindari loading semua dependency sekaligus.
+
+Lazy imports agar tidak load semua dependency sekaligus.
 """
 
-# Lazy imports — hanya load saat benar-benar dipanggil
 __all__ = ["run_basic", "run_memory", "run_rag", "run_editor", "run_cloud"]
 
 
@@ -17,14 +17,14 @@ def run_memory():
     main()
 
 
-def run_rag(*args, **kwargs):
+def run_rag(**kwargs):
     from agents.rag import main
-    main(*args, **kwargs)
+    main(**kwargs)
 
 
-def run_editor(*args, **kwargs):
+def run_editor(**kwargs):
     from agents.editor import main
-    main(*args, **kwargs)
+    main(**kwargs)
 
 
 def run_cloud():

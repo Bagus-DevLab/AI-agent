@@ -1,6 +1,5 @@
 """
 agents/rag.py — Agent dengan RAG (Retrieval-Augmented Generation).
-Optimasi Problem 3: Keamanan Path (Security Sandbox).
 """
 
 import os
@@ -10,21 +9,72 @@ from utils.scanner import scan_workspace
 from utils.vectorstore import build_vectorstore, get_retriever, save_vectorstore, load_vectorstore
 from utils.security import is_safe_path as _is_safe_path
 
-# Gunakan BASE_DIR dari config agar konsisten (bukan os.getcwd() saat import)
-
 
 def is_safe_path(path: str) -> bool:
-    """Memastikan path target tetap berada di dalam BASE_DIR (Security Sandbox)."""
+    """Pastikan path berada di dalam BASE_DIR (security sandbox)."""
     return _is_safe_path(path, BASE_DIR)
 
 
-def main():
+# ---------------------------------------------------------------------------
+# Helper
+# ---------------------------------------------------------------------------
+
+def _build_context(relevant_docs: list) -> str:
+    """Format dokumen hasil retrieval menjadi string konteks."""
+    if not relevant_docs:
+        return "(Tidak ada konteks yang relevan ditemukan)"
+
+    return "\n\n---\n\n".join(
+        f"{doc.metadata.get('source', 'unknown')}:\n{doc.page_content}"
+        for doc in relevant_docs
+    )
+
+
+def _init_vectorstore(embeddings) -> tuple:
+    """Load atau buat vectorstore baru. Return (vectorstore, retriever)."""
+    print("Memuat workspace...")
+    vectorstore = load_vectorstore()
+
+    if vectorstore is None:
+        print("Membuat index baru...")
+        docs, count = scan_workspace(BASE_DIR)
+        if not docs:
+            print("Tidak ada file yang ditemukan untuk di-index.")
+            return None, None
+        vectorstore = build_vectorstore(docs, embeddings)
+        save_vectorstore(vectorstore)
+        print(f"{count} dokumen berhasil di-index.")
+    else:
+        print("Index berhasil dimuat dari cache.")
+
+    return vectorstore, get_retriever(vectorstore)
+
+
+def _reindex(embeddings) -> tuple:
+    """Rebuild vectorstore dari scratch. Return (vectorstore, retriever, docs)."""
+    print("Rebuilding index...")
+    docs, count = scan_workspace(BASE_DIR)
+    if not docs:
+        print("Tidak ada file yang ditemukan.")
+        return None, None, []
+
+    vectorstore = build_vectorstore(docs, embeddings)
+    save_vectorstore(vectorstore)
+    retriever = get_retriever(vectorstore)
+    print(f"{len(docs)} dokumen berhasil di-reindex.")
+    return vectorstore, retriever, docs
+
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+
+def main(folder_path: str = ".") -> None:
     print("=== RAG AGENT ===\n")
 
-    # Validasi konfigurasi
     errors = validate_config()
     if errors:
-        print("❌ Konfigurasi tidak lengkap:")
+        print("Konfigurasi tidak lengkap:")
         for err in errors:
             print(f"   - {err}")
         return
@@ -32,82 +82,51 @@ def main():
     llm = get_llm()
     embeddings = get_embeddings()
 
-    # Coba load existing vectorstore, atau buat baru
-    print("📂 Memuat workspace...")
-    vectorstore = load_vectorstore()
-
+    vectorstore, retriever = _init_vectorstore(embeddings)
     if vectorstore is None:
-        print("🔨 Membuat index baru...")
-        docs, count = scan_workspace(BASE_DIR)
-        if not docs:
-            print("❌ Tidak ada file yang ditemukan untuk di-index.")
-            return
-        vectorstore = build_vectorstore(docs, embeddings)
-        save_vectorstore(vectorstore)
-        print(f"✅ {count} dokumen berhasil di-index.")
-    else:
-        print("✅ Index berhasil dimuat dari cache.")
+        return
 
-    retriever = get_retriever(vectorstore)
-
-    print("\n🤖 Agent siap! Tanya apa saja tentang kode ini.")
+    print("\nAgent siap! Tanya apa saja tentang kode ini.")
     print("Ketik 'exit' untuk keluar, 'reindex' untuk rebuild index.\n")
 
     while True:
         try:
             user_input = input("Lu: ").strip()
         except (KeyboardInterrupt, EOFError):
-            print("\n👋 Bye!")
+            print("\nBye!")
             break
 
         if not user_input:
             continue
 
         if user_input.lower() == "exit":
-            print("👋 Bye!")
+            print("Bye!")
             break
 
         if user_input.lower() == "reindex":
-            print("🔨 Rebuilding index...")
-            docs, count = scan_workspace(BASE_DIR)
-            if not docs:
-                print("❌ Tidak ada file yang ditemukan.")
+            vectorstore, retriever, _ = _reindex(embeddings)
+            if vectorstore is None:
                 continue
-            vectorstore = build_vectorstore(docs, embeddings)
-            save_vectorstore(vectorstore)
-            retriever = get_retriever(vectorstore)
-            print(f"✅ {len(docs)} dokumen berhasil di-reindex.")
             continue
 
-        # Retrieve relevant context
+        # Retrieve & respond
         try:
             relevant_docs = retriever.invoke(user_input)
         except Exception as e:
-            print(f"❌ Error saat retrieval: {e}")
+            print(f"Error saat retrieval: {e}")
             continue
 
-        if not relevant_docs:
-            context_text = "(Tidak ada konteks yang relevan ditemukan)"
-        else:
-            context_text = "\n\n---\n\n".join(
-                [f"📄 {doc.metadata.get('source', 'unknown')}:\n{doc.page_content}" for doc in relevant_docs]
-            )
-
-        # Build messages
+        context_text = _build_context(relevant_docs)
         messages = [
             SystemMessage(content=SYSTEM_PROMPT_RAG),
-            HumanMessage(content=(
-                f"Konteks dari codebase:\n{context_text}\n\n"
-                f"Pertanyaan user:\n{user_input}"
-            )),
+            HumanMessage(content=f"Konteks dari codebase:\n{context_text}\n\nPertanyaan user:\n{user_input}"),
         ]
 
-        # Get response
         try:
             response = llm.invoke(messages)
-            print(f"\n🤖: {response.content}\n")
+            print(f"\nAI: {response.content}\n")
         except Exception as e:
-            print(f"❌ Error dari LLM: {e}\n")
+            print(f"Error dari LLM: {e}\n")
 
 
 if __name__ == "__main__":
